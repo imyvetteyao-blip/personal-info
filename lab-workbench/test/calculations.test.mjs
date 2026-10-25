@@ -54,7 +54,12 @@ const component = (extra = {}) => ({
   ...extra,
 });
 const coordinated = (volumes = [600, 600, 600]) =>
-  [10, 70, 30].map((is, i) => ({ id: String(i), volume: volumes[i], stockMM: 1, targetUM: (is / 600) * 1000 }));
+  [10, 70, 30].map((is, i) => ({
+    id: String(i),
+    volume: volumes[i],
+    stockMM: 1,
+    targetUM: (is / 600) * 1000,
+  }));
 
 test("mass, volume, and concentration units normalize before calculation", () => {
   near(massMg(0.1, "g"), 100);
@@ -103,9 +108,14 @@ test("buffer below 100 mg forces stock; exactly 100 mg allows direct weighing", 
 });
 test("new buffer stock uses actual weighed mass and final solution volume", () => {
   const r = calculateBufferComponent(
-    component({ target: ".5", actualMass: "51", stockVolume: "100", actualTransfer: "98.0392156862745" }),
+    component({
+      target: ".5",
+      actualMass: "51",
+      stockVolume: "100",
+      actualTransfer: "98.0392156862745",
+    }),
     1000,
-    "mL"
+    "mL",
   );
   assert.deepEqual(r.errors, []);
   near(r.requiredMg, 50);
@@ -114,7 +124,12 @@ test("new buffer stock uses actual weighed mass and final solution volume", () =
   near(r.actualMM, 0.5);
 });
 test("buffer existing solution requires concentration confirmation and available stock", () => {
-  const c = component({ form: "solution", knownConcentration: "10", available: "200", actualTransfer: "100" });
+  const c = component({
+    form: "solution",
+    knownConcentration: "10",
+    available: "200",
+    actualTransfer: "100",
+  });
   const a = calculateBufferComponent(c, 1000, "mL");
   assert.ok(a.errors.some((x) => x.includes("Confirm")));
   const b = calculateBufferComponent({ ...c, confirmed: true }, 1000, "mL");
@@ -123,13 +138,21 @@ test("buffer existing solution requires concentration confirmation and available
   near(b.actualMM, 1);
 });
 test("pure liquids use density; solutions never use density as concentration", () => {
-  const r = calculateBufferComponent(component({ form: "pure-liquid", density: "1.05", actualLiquid: "95.23809523809524" }), 1000, "mL");
+  const r = calculateBufferComponent(
+    component({
+      form: "pure-liquid",
+      density: "1.05",
+      actualLiquid: "95.23809523809524",
+    }),
+    1000,
+    "mL",
+  );
   near(r.requiredLiquidUL, 95.23809523809524);
   near(r.actualMM, 1);
   const missing = calculateBufferComponent(component({ form: "pure-liquid" }), 1000, "mL");
-  assert.ok(missing.errors.some((x) => x.includes("Density")));
+  assert.ok(missing.errors.some((x) => /density/i.test(x)));
   const solution = calculateBufferComponent(component({ form: "solution", density: "1.05" }), 1000, "mL");
-  assert.ok(solution.errors.some((x) => x.includes("Concentration")));
+  assert.ok(solution.errors.some((x) => /concentration/i.test(x)));
 });
 test("empty buffer is a valid incomplete draft, never valid for review", () => {
   const r = calculateBuffer(blankBuffer());
@@ -149,8 +172,18 @@ test("buffer detects combined liquid additions beyond final volume", () => {
     volume: "1000",
     volumeUnit: "mL",
     components: [
-      component({ form: "pure-liquid", density: "1", actualLiquid: "600", liquidUnit: "mL" }),
-      component({ form: "pure-liquid", density: "1", actualLiquid: "600", liquidUnit: "mL" }),
+      component({
+        form: "pure-liquid",
+        density: "1",
+        actualLiquid: "600",
+        liquidUnit: "mL",
+      }),
+      component({
+        form: "pure-liquid",
+        density: "1",
+        actualLiquid: "600",
+        liquidUnit: "mL",
+      }),
     ],
   };
   assert.ok(calculateBuffer(b).errors.some((e) => e.includes("Combined liquid")));
@@ -170,7 +203,13 @@ test("single-standard strict <3000 µL and availability constraints", () => {
   assert.ok(calculateSingle(stock({ available: "2001" })).errors.some((e) => e.includes("exceed prepared")));
 });
 test("qNMR concentration requires its sample volume even if preparation volume is given", () => {
-  const r = calculateSingle(stock({ source: "qnmr-concentration", qConcentration: "100", sampleVolume: "500" }));
+  const r = calculateSingle(
+    stock({
+      source: "qnmr-concentration",
+      qConcentration: "100",
+      sampleVolume: "500",
+    }),
+  );
   near(r.amountUmol, 0.05);
   near(r.stockMM, 0.025);
   assert.ok(calculateSingle(stock({ source: "qnmr-concentration", qConcentration: "100" })).errors.length);
@@ -179,7 +218,7 @@ test("A/B/C acceptance case preserves B and scales every component within A and 
   const p = coordinateVolumes(coordinated());
   assert.deepEqual(
     p.map((r) => r.selectedVolume),
-    [1200, 600, 1200]
+    [1200, 600, 1200],
   );
   p.forEach((r, i) => near(r.finalIS, [20, 70, 60][i]));
   assert.equal(p[1].reason, "Original volume retained: scaled IS aliquot would exceed 100 µL.");
@@ -215,7 +254,7 @@ test("all original IS aliquots sufficient means no automatic scaling", () => {
   ]);
   assert.deepEqual(
     p.map((r) => r.selectedVolume),
-    [600, 600]
+    [600, 600],
   );
 });
 test("different originals need explicit Match; proposed volume never shrinks originals", () => {
@@ -223,7 +262,7 @@ test("different originals need explicit Match; proposed volume never shrinks ori
   const p = coordinateVolumes(b);
   assert.deepEqual(
     p.map((r) => r.selectedVolume),
-    [600, 900, 600]
+    [600, 900, 600],
   );
   const m = coordinateVolumes(b, 20, 100, true);
   assert.ok(m.every((r) => r.proposedVolume >= 900));
@@ -237,7 +276,7 @@ test("original IS below minimum cannot be retained just to obey threshold", () =
       { id: "b", volume: 600, stockMM: 1, targetUM: 10 },
     ],
     20,
-    100
+    100,
   );
   assert.ok(p.every((r) => r.finalIS >= 20));
   near(p[1].selectedVolume, 2000);
@@ -246,7 +285,12 @@ test("missing MW still permits qNMR volume calculation but never invents zero ma
   const c = blankCocktail();
   Object.assign(c, { assayVolume: "30" });
   c.stocks.S = stock({ source: "qnmr-amount", amount: "10", mw: "" });
-  c.stocks.IS = stock({ source: "qnmr-amount", amount: "1", mw: "", target: "5" });
+  c.stocks.IS = stock({
+    source: "qnmr-amount",
+    amount: "1",
+    mw: "",
+    target: "5",
+  });
   const r = calculateCocktail(c, 600);
   assert.deepEqual(r.errors, []);
   assert.equal(r.rows[0].massUG, null);
@@ -274,12 +318,24 @@ test("unconfirmed volume plan cannot become Reviewed; confirmed valid demo can",
 });
 test("save/reopen JSON preserves full precision, inputs, rule snapshot and inventory fields", () => {
   const store = new Map(),
-    storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+    storage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v),
+    };
   const b = {
     ...blankBuffer(),
     name: "Snapshot",
     volume: "1000",
-    components: [component({ inventory: { Name: "Glycine hydrate", Lot: "ABC", "Extra field": "<original>" }, reviewed: true })],
+    components: [
+      component({
+        inventory: {
+          Name: "Glycine hydrate",
+          Lot: "ABC",
+          "Extra field": "<original>",
+        },
+        reviewed: true,
+      }),
+    ],
   };
   const r = makeRecord("buffer", b, "Reviewed");
   saveRecord(r, storage);
@@ -303,7 +359,10 @@ test("old rule snapshots survive decoding without silent recalculation", () => {
 test("invalid record and unsafe JSON are rejected; broken browser storage is not overwritten", () => {
   assert.throws(() => decodeRecord("{}"), /supported/);
   assert.throws(() => decodeRecord('{"__proto__":{}}'), /Unsafe/);
-  const storage = { getItem: () => "{bad", setItem: () => assert.fail("must not overwrite") };
+  const storage = {
+    getItem: () => "{bad",
+    setItem: () => assert.fail("must not overwrite"),
+  };
   assert.throws(() => saveRecord(makeRecord("sis", blankSIS()), storage));
 });
 test("CSV handles BOM, quoted commas/newlines, retains complete rows and maps search", () => {

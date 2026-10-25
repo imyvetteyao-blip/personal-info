@@ -40,7 +40,13 @@ export function blankCocktail() {
     stocks: { S: blankStock("S"), IS: blankStock("IS") },
   };
 }
-export const blankBuffer = () => ({ name: "", volume: "", volumeUnit: "mL", components: [], demo: false });
+export const blankBuffer = () => ({
+  name: "",
+  volume: "",
+  volumeUnit: "mL",
+  components: [],
+  demo: false,
+});
 export const blankSIS = () => ({
   name: "",
   minimum: "20",
@@ -57,6 +63,9 @@ export function componentFromRow(row, mapping, source) {
     name: pick("name"),
     inventory: structuredClone(row),
     inventorySource: source,
+    inventoryMapping: structuredClone(mapping),
+    observationMethod: "volume",
+    stockObservationMethod: "mass",
     mw: pick("mw"),
     form: "",
     density: pick("density"),
@@ -161,7 +170,7 @@ export function validateRecord(r) {
     if (!item || typeof item.id !== "string") throw new Error("Invalid record item.");
     if (r.kind === "buffer" && (!item.inventory || typeof item.inventory !== "object" || Array.isArray(item.inventory)))
       throw new Error("Missing inventory snapshot.");
-    if (r.kind === "buffer") checkFields(item, componentFromRow({}, {}, ""));
+    if (r.kind === "buffer") checkFields(item, componentFromRow({}, {}, ""), ["observationMethod", "stockObservationMethod"]);
     if (r.kind === "sis") {
       checkFields(item, blankCocktail());
       if (!item.stocks?.S || !item.stocks?.IS) throw new Error("Missing S / IS stock inputs.");
@@ -198,7 +207,7 @@ export function decodeRecord(text) {
     JSON.parse(text, (k, v) => {
       if (["__proto__", "constructor", "prototype"].includes(k)) throw new Error("Unsafe record property.");
       return v;
-    })
+    }),
   );
 }
 export function copyRecord(record) {
@@ -206,6 +215,15 @@ export function copyRecord(record) {
   return makeRecord(r.kind, {
     ...r.inputs,
     name: `${r.name} (copy)`,
-    ...(r.kind === "sis" ? { confirmed: false } : { components: r.inputs.components.map((c) => ({ ...c, reviewed: false })) }),
+    ...(r.kind === "sis"
+      ? { confirmed: false }
+      : {
+          components: r.inputs.components.map((c) => ({
+            ...c,
+            observationMethod: c.observationMethod || "volume",
+            stockObservationMethod: c.stockObservationMethod || "mass",
+            reviewed: false,
+          })),
+        }),
   });
 }

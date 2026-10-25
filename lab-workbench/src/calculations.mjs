@@ -1,4 +1,4 @@
-export const RULE_VERSION = "1.0.0";
+export const RULE_VERSION = "1.1.0";
 // Relative tolerance only for floating-point comparisons at decision boundaries; results stay unrounded.
 export const below = (a, b) => a < b && b - a > 16 * Number.EPSILON * Math.max(Math.abs(a), Math.abs(b), 1);
 export const above = (a, b) => below(b, a);
@@ -120,7 +120,12 @@ export function coordinateVolumes(batches, minimum = 20, threshold = 100, match 
     const original = positive(b.volume, "Original volume"),
       stock = positive(b.stockMM, "IS stock concentration"),
       target = positive(b.targetUM, "IS target concentration");
-    return { ...b, original, originalIS: aliquot(target, stock, original), minimumVolume: finite((min * stock * 1000) / target) };
+    return {
+      ...b,
+      original,
+      originalIS: aliquot(target, stock, original),
+      minimumVolume: finite((min * stock * 1000) / target),
+    };
   });
   const same = rows.every((r) => r.original === rows[0].original);
   const deficient = rows.some((r) => below(r.originalIS, min));
@@ -206,77 +211,207 @@ export function calculateCocktail(c, selectedVolume) {
     };
   });
 }
+function namedVolume(value, unit, label) {
+  positive(value, label);
+  return volumeUL(value, unit);
+}
+function namedMass(value, unit, label) {
+  positive(value, label);
+  return massMg(value, unit);
+}
+const supplied = (value) => value != null && String(value).trim() !== "";
+function optionalMeasurement(value, unit, convert) {
+  if (!supplied(value)) return null;
+  try {
+    return convert(value, unit);
+  } catch {
+    return null;
+  }
+}
+export function massError(observedMg, targetMg) {
+  positive(targetMg, "Target mass");
+  positive(observedMg, "Observed mass");
+  const deviationMg = observedMg - targetMg;
+  const errorPercent = (deviationMg / targetMg) * 100;
+  if (!Number.isFinite(errorPercent)) throw new Error("Mass error is outside the supported numeric range.");
+  return { deviationMg, errorPercent };
+}
 export function calculateBufferComponent(c, volume, unit) {
   return attempt(() => {
-    const mw = positive(c.mw, "Molecular weight"),
-      finalML = volumeUL(volume, unit) / 1000;
-    const targetMM = concentrationMM(c.target, c.targetUnit, mw),
-      requiredMg = requiredBufferMass(targetMM, finalML, mw);
+    const mw = positive(c.mw, "Molecular weight");
+    const finalML = namedVolume(volume, unit, "Final buffer volume") / 1000;
+    const targetMM = concentrationMM(c.target, c.targetUnit, mw);
+    const requiredMg = requiredBufferMass(targetMM, finalML, mw);
     const errors = [],
-      warnings = [];
-    if (!["solid", "pure-liquid", "solution"].includes(c.form)) throw new Error("Physical form is required; do not infer it from the compound name.");
-    const density = c.form === "pure-liquid" ? positive(c.density, "Density (g/mL)") : null;
-    let stockMM = null,
-      transferML = null,
-      actualMM = null,
-      liquidML = 0;
-    const forcedStock = needsStock(requiredMg),
-      method = c.form === "solution" ? "existing" : forcedStock && c.method === "direct" ? "new" : c.method;
-    const formulas = [`Required mass (mg) = ${targetMM} mM × ${finalML} mL × ${mw} g/mol / 1000 = ${requiredMg}`];
-    try {
-      if (method === "direct") {
-        if (c.form === "solid") actualMM = (massMg(c.actualMass, c.massUnit) * 1000) / (mw * finalML);
-        else {
-          liquidML = volumeUL(c.actualLiquid, c.liquidUnit) / 1000;
-          actualMM = (liquidML * density * 1e6) / (mw * finalML);
-        }
-        formulas.push(`Actual concentration = actual mass (mg) × 1000 / (${mw} × ${finalML}) = ${actualMM} mM`);
-      } else {
-        if (method === "new") stockMM = stockFromWeight(massMg(c.actualMass, c.massUnit), mw, volumeUL(c.stockVolume, c.stockVolumeUnit));
-        else if (method === "existing") {
-          stockMM = concentrationMM(c.knownConcentration, c.knownUnit, mw);
-          if (!c.confirmed) errors.push("Confirm the existing stock concentration.");
-        } else throw new Error("Select a preparation method.");
-        transferML = finite((targetMM / stockMM) * finalML);
-        if (transferML > finalML) errors.push("Stock transfer volume exceeds final buffer volume.");
-        formulas.push(
-          method === "new"
-            ? `Stock concentration = ${massMg(c.actualMass, c.massUnit)} mg × 1000 / (${mw} × ${volumeUL(c.stockVolume, c.stockVolumeUnit) / 1000} mL) = ${stockMM} mM`
-            : `Confirmed stock concentration = ${stockMM} mM`
-        );
-        formulas.push(`Stock transfer volume = ${targetMM} / ${stockMM} × ${finalML} = ${transferML} mL`);
-        const availableML = method === "new" ? volumeUL(c.stockVolume, c.stockVolumeUnit) / 1000 : volumeUL(c.available, c.availableUnit) / 1000;
-        if (above(transferML, availableML)) errors.push("Required stock volume exceeds available volume.");
-        liquidML = volumeUL(c.actualTransfer, c.transferUnit) / 1000;
-        if (above(liquidML, availableML)) errors.push("Actual transfer exceeds available stock volume.");
-        actualMM = (stockMM * liquidML) / finalML;
-        formulas.push(`Actual final concentration = ${stockMM} × ${liquidML} / ${finalML} = ${actualMM} mM`);
-      }
-    } catch (e) {
-      errors.push(e.message);
-    }
-    if (actualMM != null && (!Number.isFinite(actualMM) || actualMM <= 0))
-      throw new Error("Actual concentration is outside the supported numeric range.");
-    if (liquidML > finalML) errors.push("Actual liquid volume exceeds final buffer volume.");
-    return {
+      warnings = [],
+      formulas = [`Target mass (mg) = ${targetMM} mM × ${finalML} mL × ${mw} g/mol / 1000 = ${requiredMg}`];
+    const forcedStock = needsStock(requiredMg);
+    const method = c.form === "solution" ? "existing" : forcedStock && c.method === "direct" ? "new" : c.method;
+    const observationMethod =
+      c.form === "solid"
+        ? "mass"
+        : method === "new" && c.form === "pure-liquid"
+          ? c.stockObservationMethod || "mass"
+          : c.observationMethod || "volume";
+    const r = {
       requiredMg,
       forcedStock,
       method,
       targetMM,
-      stockMM,
-      transferML,
-      actualMM,
-      liquidML,
-      requiredLiquidUL: density ? requiredMg / density : null,
+      stockMM: null,
+      transferML: null,
+      stockTransferUL: null,
+      actualMM: null,
+      liquidML: null,
+      requiredLiquidUL: null,
+      observedMassMg: null,
+      observedVolumeUL: null,
+      calculatedMassMg: null,
+      calculatedVolumeUL: null,
+      basisMassMg: null,
+      stockActualMassMg: null,
+      stockFinalVolumeUL: null,
+      massDeviationMg: null,
+      massErrorPercent: null,
+      observationMethod,
+      massErrorBasis: null,
+      actualConcentrationBasis: null,
       errors,
       warnings,
       formulas,
     };
+    if (!["solid", "pure-liquid", "solution"].includes(c.form)) {
+      errors.push("Physical form is required; do not infer it from the compound name.");
+      return r;
+    }
+    let density = null;
+    if (c.form === "pure-liquid") {
+      try {
+        density = positive(c.density, "Pure-liquid density (g/mL)");
+        r.requiredLiquidUL = finite(requiredMg / density);
+        formulas.push(`Target liquid volume (µL) = ${requiredMg} mg / ${density} g/mL = ${r.requiredLiquidUL}`);
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+    try {
+      if (method === "direct") {
+        if (!["mass", "volume"].includes(observationMethod)) throw new Error("Select By Mass or By Volume for Observation Method.");
+        r.observedMassMg = optionalMeasurement(c.actualMass, c.massUnit, massMg);
+        if (c.form === "pure-liquid") r.observedVolumeUL = optionalMeasurement(c.actualLiquid, c.liquidUnit, volumeUL);
+        if (observationMethod === "mass") {
+          r.observedMassMg = namedMass(c.actualMass, c.massUnit, "Observed mass");
+          r.basisMassMg = r.observedMassMg;
+          r.actualConcentrationBasis = "Measured mass";
+          r.massErrorBasis = "Measured mass";
+          if (c.form === "pure-liquid" && density) {
+            r.calculatedVolumeUL = finite(r.basisMassMg / density);
+            r.liquidML = r.calculatedVolumeUL / 1000;
+          } else if (c.form === "solid") r.liquidML = 0;
+        } else {
+          r.observedVolumeUL = namedVolume(c.actualLiquid, c.liquidUnit, "Observed pure-liquid volume");
+          if (!density) return r;
+          r.calculatedMassMg = finite(r.observedVolumeUL * density);
+          r.basisMassMg = r.calculatedMassMg;
+          r.liquidML = r.observedVolumeUL / 1000;
+          r.actualConcentrationBasis = "Calculated from observed volume";
+          r.massErrorBasis = "Calculated from observed volume";
+          formulas.push(`Mass (mg) = ${r.observedVolumeUL} µL × ${density} g/mL = ${r.calculatedMassMg}`);
+        }
+        r.actualMM = finite((r.basisMassMg * 1000) / (mw * finalML));
+        const deviation = massError(r.basisMassMg, requiredMg);
+        r.massDeviationMg = deviation.deviationMg;
+        r.massErrorPercent = deviation.errorPercent;
+        formulas.push(
+          `Actual final concentration (mM) = ${r.basisMassMg} mg × 1000 / (${mw} × ${finalML} mL) = ${r.actualMM}`,
+          `Mass deviation (mg) = ${r.basisMassMg} − ${requiredMg} = ${r.massDeviationMg}`,
+          `Mass error (%) = (${r.basisMassMg} − ${requiredMg}) / ${requiredMg} × 100 = ${r.massErrorPercent}`,
+        );
+      } else {
+        let availableUL = null;
+        if (method === "new") {
+          r.stockMeasuredMassMg = optionalMeasurement(c.actualMass, c.massUnit, massMg);
+          if (c.form === "pure-liquid") r.stockMeasuredVolumeUL = optionalMeasurement(c.actualLiquid, c.liquidUnit, volumeUL);
+          if (c.form === "pure-liquid" && observationMethod === "volume") {
+            const observed = namedVolume(c.actualLiquid, c.liquidUnit, "Observed pure-liquid volume for stock preparation");
+            if (!density) return r;
+            r.stockActualMassMg = finite(observed * density);
+            r.stockCalculatedMassMg = r.stockActualMassMg;
+            r.stockMassBasis = "Calculated from observed pure-liquid volume and density";
+            formulas.push(`Stock compound mass (mg) = ${observed} µL × ${density} g/mL = ${r.stockActualMassMg}`);
+          } else {
+            if (c.form === "pure-liquid" && observationMethod !== "mass")
+              throw new Error("Select By Mass or By Volume for stock Observation Method.");
+            r.stockActualMassMg = namedMass(c.actualMass, c.massUnit, "Stock actual mass");
+            r.stockMassBasis = "Measured mass";
+            if (c.form === "pure-liquid" && density) r.stockCalculatedVolumeUL = finite(r.stockActualMassMg / density);
+          }
+          r.stockFinalVolumeUL = namedVolume(c.stockVolume, c.stockVolumeUnit, "Stock final solution volume");
+          r.stockMM = stockFromWeight(r.stockActualMassMg, mw, r.stockFinalVolumeUL);
+          availableUL = r.stockFinalVolumeUL;
+          formulas.push(`Stock concentration (mM) = ${r.stockActualMassMg} mg × 1000000 / (${mw} × ${r.stockFinalVolumeUL} µL) = ${r.stockMM}`);
+        } else if (method === "existing") {
+          positive(c.knownConcentration, "Known stock concentration");
+          r.stockMM = concentrationMM(c.knownConcentration, c.knownUnit, mw);
+          if (!c.confirmed) errors.push("Confirm the existing stock concentration.");
+          // Availability is independent of concentration and transfer calculation.
+          try {
+            availableUL = namedVolume(c.available, c.availableUnit, "Available existing stock volume");
+          } catch (e) {
+            errors.push(e.message);
+          }
+          formulas.push(`Known stock concentration = ${r.stockMM} mM`);
+        } else throw new Error("Select a preparation method.");
+        r.transferML = finite((targetMM / r.stockMM) * finalML);
+        r.stockTransferUL = finite(r.transferML * 1000);
+        if (above(r.transferML, finalML)) errors.push("Stock transfer volume exceeds final buffer volume.");
+        if (availableUL != null && above(r.stockTransferUL, availableUL)) errors.push("Required stock volume exceeds available volume.");
+        formulas.push(`Stock transfer volume (µL) = ${targetMM} / ${r.stockMM} × ${finalML} mL × 1000 = ${r.stockTransferUL}`);
+        r.liquidML = r.transferML;
+        if (c.form === "solution") {
+          r.requiredLiquidUL = r.stockTransferUL;
+          r.observedMassMg = optionalMeasurement(c.actualMass, c.massUnit, massMg);
+          r.observedVolumeUL = optionalMeasurement(c.actualTransfer, c.transferUnit, volumeUL);
+          if (observationMethod === "mass") {
+            const solutionDensity = positive(c.density, "Solution density (g/mL) for By Mass");
+            r.observedMassMg = namedMass(c.actualMass, c.massUnit, "Observed solution mass");
+            r.calculatedVolumeUL = finite(r.observedMassMg / solutionDensity);
+            r.liquidML = r.calculatedVolumeUL / 1000;
+            r.actualConcentrationBasis = "Known solution concentration × volume calculated from measured solution mass and solution density";
+            formulas.push(
+              `Solution volume (µL) = ${r.observedMassMg} mg / ${solutionDensity} g/mL = ${r.calculatedVolumeUL}; solution mass is not solute mass.`,
+            );
+          } else if (observationMethod !== "volume") throw new Error("Select By Mass or By Volume for Observation Method.");
+          else if (supplied(c.actualTransfer)) {
+            r.observedVolumeUL = namedVolume(c.actualTransfer, c.transferUnit, "Observed stock transfer volume");
+            r.liquidML = r.observedVolumeUL / 1000;
+            r.actualConcentrationBasis = "Known solution concentration and measured volume";
+          }
+        } else if (supplied(c.actualTransfer)) {
+          r.observedVolumeUL = namedVolume(c.actualTransfer, c.transferUnit, "Observed stock transfer volume");
+          r.liquidML = r.observedVolumeUL / 1000;
+          r.actualConcentrationBasis = "Stock concentration and measured transfer volume";
+        }
+        // Actual concentration is an observed result, never fabricated from a planned transfer.
+        if (r.actualConcentrationBasis) {
+          if (availableUL != null && above(r.liquidML * 1000, availableUL)) errors.push("Observed transfer exceeds available stock volume.");
+          r.actualMM = finite((r.stockMM * r.liquidML) / finalML);
+          formulas.push(`Actual final concentration (mM) = ${r.stockMM} × ${r.liquidML} / ${finalML} = ${r.actualMM}`);
+        }
+      }
+    } catch (e) {
+      errors.push(e.message);
+    }
+    if (r.liquidML != null && above(r.liquidML, finalML)) errors.push("Liquid additions exceed final buffer volume.");
+    return r;
   });
 }
 export function calculateBuffer(b) {
   const errors = [],
-    rows = b.components.map((c) => ({ id: c.id, ...calculateBufferComponent(c, b.volume, b.volumeUnit) }));
+    rows = b.components.map((c) => ({
+      id: c.id,
+      ...calculateBufferComponent(c, b.volume, b.volumeUnit),
+    }));
   if (!b.name?.trim()) errors.push("Preparation name is required.");
   if (!rows.length) errors.push("Add at least one inventory component.");
   try {
@@ -316,7 +451,7 @@ export function calculateSIS(s) {
       })),
       s.minimum,
       s.threshold,
-      s.match
+      s.match,
     );
   } catch (e) {
     errors.push(e.message);
@@ -337,6 +472,10 @@ export function calculateSIS(s) {
     plan,
     errors,
     warnings,
-    rules: { ...RULES, minimumISuL: validPositiveOrNull(s.minimum), thresholdISuL: validPositiveOrNull(s.threshold) },
+    rules: {
+      ...RULES,
+      minimumISuL: validPositiveOrNull(s.minimum),
+      thresholdISuL: validPositiveOrNull(s.threshold),
+    },
   };
 }

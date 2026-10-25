@@ -14,18 +14,25 @@ test("home has three honest entry points and a desktop layout without overflow",
   await expect(page.getByRole("heading", { name: "Buffer Making", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "S/IS Making", exact: true })).toBeVisible();
   await expect(page.getByText("Coming soon", { exact: true })).toBeVisible();
-  await expect(page.getByText("No company system or backend is connected.", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("No company system or backend is connected.", {
+      exact: false,
+    }),
+  ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   expect(errors).toEqual([]);
-  await page.screenshot({ path: "output/playwright/lab/home-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: "output/playwright/lab/home-desktop.png",
+    fullPage: true,
+  });
 });
-test("A/B/C plan, confirmation, review, save/reopen, full record JSON and edit invalidation", async ({ page }) => {
+test("A/B/C plan, confirmation, review, save/reopen, Excel export and edit invalidation", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await demo(page);
   const rows = page.locator(".plan-table tbody tr");
   await expect(rows).toHaveCount(3);
-  for (const [i, v] of ["1,200", "600", "1,200"].entries()) await expect(rows.nth(i).locator("td").nth(3)).toHaveText(v);
+  for (const [i, v] of ["1200.00", "600.00", "1200.00"].entries()) await expect(rows.nth(i).locator("td").nth(3)).toHaveText(v);
   await expect(rows.nth(1)).toContainText("Original volume retained: scaled IS aliquot would exceed 100 µL.");
   await expect(page.getByRole("button", { name: "Mark Reviewed", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Confirm volume plan", exact: true }).click();
@@ -36,9 +43,12 @@ test("A/B/C plan, confirmation, review, save/reopen, full record JSON and edit i
   before.results.plan.forEach((p, i) => expect(p.selectedVolume).toBeCloseTo([1200, 600, 1200][i], 9));
   expect(before.demo).toBe(true);
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export JSON", exact: true }).click();
+  await page.getByRole("button", { name: "Export Preparation Excel", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^demo-sis/);
+  expect(download.suggestedFilename()).toMatch(/^demo-sis.*\.xlsx$/);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(await download.path());
+  expect(workbook.getWorksheet("Cocktails")).toBeTruthy();
   await page.reload();
   await page.getByRole("link", { name: "Records", exact: true }).click();
   await page.getByRole("button", { name: "Open", exact: true }).click();
@@ -53,7 +63,7 @@ test("A/B/C plan, confirmation, review, save/reopen, full record JSON and edit i
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("lab-preparation-workbench.records.v1"))[0].status)).toBe("Draft");
   expect(errors).toEqual([]);
 });
-test("full cocktail table headers, missing MW behavior and printable sheets", async ({ page }) => {
+test("full cocktail headers and missing MW remain correct with Excel replacing print", async ({ page }) => {
   await demo(page);
   await page.getByRole("button", { name: "Confirm volume plan", exact: true }).click();
   const headers = page.locator(".workspace .results-table").first().locator("th");
@@ -64,15 +74,20 @@ test("full cocktail table headers, missing MW behavior and printable sheets", as
   }
   await field(page, "cocktails.0.stocks.S.mw").fill("");
   await expect(page.locator(".workspace .results-table").first().locator("tbody tr").first()).toContainText("Missing MW");
-  await expect(page.locator(".workspace .results-table").first().locator("tbody tr").first().locator("td").last()).toHaveText("120");
+  await expect(page.locator(".workspace .results-table").first().locator("tbody tr").first().locator("td").last()).toHaveText("120.00");
   await page.getByRole("button", { name: "Confirm volume plan", exact: true }).click();
-  await page.screenshot({ path: "output/playwright/lab/sis-desktop.png", fullPage: true });
-  await page.emulateMedia({ media: "print" });
-  await expect(page.locator(".operation")).toBeVisible();
-  await expect(page.locator(".workspace")).toBeHidden();
-  await expect(page.locator(".operation")).toContainText("Demo data");
-  await expect(page.locator(".operation")).toContainText("Final Cocktail Volume: 1,200 µL");
-  await page.pdf({ path: "output/playwright/lab/demo-operation-sheet.pdf", format: "A4", landscape: true, printBackground: true });
+  await page.screenshot({
+    path: "output/playwright/lab/sis-desktop.png",
+    fullPage: true,
+  });
+  await expect(page.getByRole("button", { name: /Print/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Export JSON" })).toHaveCount(0);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export Preparation Excel", exact: true }).click();
+  const w = new ExcelJS.Workbook();
+  await w.xlsx.readFile(await (await downloadPromise).path());
+  const sheet = w.getWorksheet("Cocktails");
+  expect(sheet.getRow(12).values).toContain("Stock Volume to Transfer (µL)");
 });
 test("CSV import, full inventory snapshots, two independent components and reviewed invalidation", async ({ page }) => {
   await page.goto("#buffer");
@@ -82,7 +97,7 @@ test("CSV import, full inventory snapshots, two independent components and revie
     name: "inventory.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(
-      "Name,CAS,Barcode,MW,Lot,Extra\nGlycine hydrate,56-40-6,G1,100,LOT-A,Keep this field\nSalt hydrate,123,S2,100,LOT-B,Keep second field"
+      "Name,CAS,Barcode,MW,Lot,Extra\nGlycine hydrate,56-40-6,G1,100,LOT-A,Keep this field\nSalt hydrate,123,S2,100,LOT-B,Keep second field",
     ),
   });
   await expect(page.getByText("2 entries", { exact: true })).toBeVisible();
@@ -116,14 +131,16 @@ test("CSV import, full inventory snapshots, two independent components and revie
   expect(r.inputs.components).toHaveLength(2);
   expect(r.inputs.components[1].method).toBe("new");
   expect(r.demo).toBe(false);
-  await page.screenshot({ path: "output/playwright/lab/buffer-desktop.png", fullPage: true });
+  await page.screenshot({
+    path: "output/playwright/lab/buffer-desktop.png",
+    fullPage: true,
+  });
 });
-test("XLSX worksheets and custom header rows retain all source fields without evaluating formulas", async ({ page }) => {
+test("XLSX fixed template imports automatically without parser selectors", async ({ page }) => {
   const book = new ExcelJS.Workbook();
   book.addWorksheet("Instructions").addRow(["Reference only"]);
   const sheet = book.addWorksheet("Chemicals");
-  sheet.addRow(["Inventory title"]);
-  sheet.addRow(["Chemical ID", "CAS no.", "Code", "MW", "Custom field"]);
+  sheet.addRow(["Chemical Name", "CAS", "Barcode", "MW", "Custom field"]);
   sheet.addRow(["Exact salt hydrate", "123-45-6", "ABC", 210.1, "Full row value"]);
   await page.goto("#buffer");
   await page.locator("#inventory-file").setInputFiles({
@@ -131,11 +148,8 @@ test("XLSX worksheets and custom header rows retain all source fields without ev
     mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     buffer: Buffer.from(await book.xlsx.writeBuffer()),
   });
-  await page.locator("#sheet-index").selectOption("1");
-  await page.locator("#header-row").fill("2");
-  await page.locator("#header-row").dispatchEvent("change");
-  await page.locator("#map-name").selectOption("Chemical ID");
-  await page.locator("#map-barcode").selectOption("Code");
+  await expect(page.getByText("1 entries", { exact: true })).toBeVisible();
+  await expect(page.locator("#sheet-index,#header-row,[data-map]")).toHaveCount(0);
   await page.locator("#inventory-query").fill("ABC");
   await expect(page.getByText("Full row value", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Add component", exact: true }).click();
@@ -148,7 +162,11 @@ test("JSON import is Draft, snapshot preserved, duplication gets a fresh identit
   await page.getByRole("button", { name: "Save Preparation Record", exact: true }).first().click();
   const r = await page.evaluate(() => JSON.parse(localStorage.getItem("lab-preparation-workbench.records.v1"))[0]);
   await page.getByRole("link", { name: "Records", exact: true }).click();
-  await page.locator("#record-file").setInputFiles({ name: "record.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(r)) });
+  await page.locator("#record-file").setInputFiles({
+    name: "record.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(r)),
+  });
   await expect(page.getByText("2 records", { exact: true })).toBeVisible();
   const rows = await page.evaluate(() => JSON.parse(localStorage.getItem("lab-preparation-workbench.records.v1")));
   expect(rows[0].id).not.toBe(r.id);
@@ -163,5 +181,8 @@ test("mobile shell stays within viewport and data tables scroll horizontally", a
   await demo(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   await expect(page.getByRole("button", { name: "Confirm volume plan", exact: true })).toBeVisible();
-  await page.screenshot({ path: "output/playwright/lab/sis-mobile.png", fullPage: true });
+  await page.screenshot({
+    path: "output/playwright/lab/sis-mobile.png",
+    fullPage: true,
+  });
 });

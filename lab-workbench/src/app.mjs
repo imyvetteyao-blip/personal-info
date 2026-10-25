@@ -14,16 +14,19 @@ import {
   decodeRecord,
   copyRecord,
 } from "./models.mjs";
-import { readInventoryFile, tableFromRows, suggestMapping, matchingRows } from "./inventory.mjs";
+import { importInventory, matchingRows } from "./inventory.mjs";
+import { isMeaningful } from "./inventory-config.mjs";
+import { formatResult } from "./format.mjs";
+import { createPreparationWorkbook } from "./excel.mjs";
 
 const app = document.querySelector("#app");
-const editors = { buffer: { inputs: blankBuffer(), status: "Draft", dirty: false }, sis: { inputs: blankSIS(), status: "Draft", dirty: false } };
+const editors = {
+  buffer: { inputs: blankBuffer(), status: "Draft", dirty: false },
+  sis: { inputs: blankSIS(), status: "Draft", dirty: false },
+};
 let route = location.hash.slice(1) || "home",
   records = [],
   inventory = null,
-  workbook = [],
-  sheetIndex = 0,
-  headerRow = 1,
   query = "",
   inventoryLoading = false,
   storageError = "",
@@ -35,14 +38,12 @@ try {
   storageError = `Browser storage could not be read: ${e.message}`;
 }
 const escape = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const fmt = (v) =>
-  v == null || !Number.isFinite(v)
-    ? "—"
-    : v === 0
-      ? "0"
-      : Math.abs(v) < 0.0001 || Math.abs(v) >= 1e8
-        ? v.toExponential(5)
-        : new Intl.NumberFormat("en-US", { maximumSignificantDigits: 9 }).format(v);
+const fmt = (v, signed = false) => {
+  const text = escape(formatResult(v, { signed }));
+  return v == null || !Number.isFinite(v)
+    ? text
+    : `<span class="calculated-value" tabindex="0" role="button" data-action="precision" data-value="${v}" title="Full precision: ${v}">${text}</span>`;
+};
 const units = {
   mass: ["mg", "g", "µg"],
   volume: ["µL", "mL", "L"],
@@ -98,7 +99,12 @@ function invalidate() {
   e.dirty = true;
   e.snapshot = null;
   if (route === "sis") e.inputs.confirmed = false;
-  else e.inputs.components.forEach((c) => (c.reviewed = false));
+  else
+    e.inputs.components.forEach((c) => {
+      c.reviewed = false;
+      if (c.observationMethod == null) c.observationMethod = "volume";
+      if (c.stockObservationMethod == null) c.stockObservationMethod = "mass";
+    });
 }
 function normalizePreparationMethods() {
   if (route !== "buffer") return;
@@ -126,34 +132,38 @@ function header() {
     .join("")}</nav><span class="local"><span class="dot"></span>Browser local workspace</span></header>`;
 }
 function home() {
-  return `<div class="home-hero"><div class="eyebrow">YOUR LAB, ORGANIZED</div><h1>Prepare with confidence.<br>Keep every calculation clear.</h1><p>A practical workspace for buffer recipes, single standards, and S/IS cocktails. From your first input to a reviewed preparation record.</p></div><div class="module-grid"><a class="module" href="#buffer"><div class="module-icon">Bf</div><h2>Buffer Making</h2><p>Build a complete buffer recipe from your chemical inventory. Calculate quantities and record actual preparation.</p><span class="module-link">Start a buffer preparation &nbsp; →</span></a><a class="module" href="#sis"><div class="module-icon">S/IS</div><h2>S/IS Making</h2><p>Prepare single standards, coordinate cocktail volumes, and review every stock transfer.</p><span class="module-link">Open the S/IS workbench &nbsp; →</span></a><div class="module"><div class="module-icon">···</div><h2>Other Preparation</h2><p>More preparation workflows will be available here.</p><span>${badge("Coming soon")}</span></div></div><div class="notice">Saved records and imported inventory stay in this browser on this device. No company system or backend is connected. Export JSON records for backup; browser data can be cleared.</div><div class="stats"><div><h3>01 &nbsp; Define your preparation</h3><p>Use explicit units, inventory snapshots, and stock details.</p></div><div><h3>02 &nbsp; Check the calculation</h3><p>Inspect formulas, volume plans, and validation before review.</p></div><div><h3>03 &nbsp; Keep a useful record</h3><p>Save locally, reopen, export JSON, or print an operation sheet.</p></div></div>`;
+  return `<div class="home-hero"><div class="eyebrow">YOUR LAB, ORGANIZED</div><h1>Prepare with confidence.<br>Keep every calculation clear.</h1><p>A practical workspace for buffer recipes, single standards, and S/IS cocktails. From your first input to a reviewed preparation record.</p></div><div class="module-grid"><a class="module" href="#buffer"><div class="module-icon">Bf</div><h2>Buffer Making</h2><p>Build a complete buffer recipe from your chemical inventory. Calculate quantities and record actual preparation.</p><span class="module-link">Start a buffer preparation &nbsp; →</span></a><a class="module" href="#sis"><div class="module-icon">S/IS</div><h2>S/IS Making</h2><p>Prepare single standards, coordinate cocktail volumes, and review every stock transfer.</p><span class="module-link">Open the S/IS workbench &nbsp; →</span></a><div class="module"><div class="module-icon">···</div><h2>Other Preparation</h2><p>More preparation workflows will be available here.</p><span>${badge("Coming soon")}</span></div></div><div class="notice">Saved records and imported inventory stay in this browser on this device. No company system or backend is connected. Export preparation Excel files for documentation; browser data can be cleared.</div><div class="stats"><div><h3>01 &nbsp; Define your preparation</h3><p>Use explicit units, inventory snapshots, and stock details.</p></div><div><h3>02 &nbsp; Check the calculation</h3><p>Inspect formulas, volume plans, and validation before review.</p></div><div><h3>03 &nbsp; Keep a useful record</h3><p>Save locally, reopen, export a preparation Excel workbook.</p></div></div>`;
 }
 function title() {
   const e = editor();
-  return `<div class="title-row"><div><div class="eyebrow">PREPARATION WORKSPACE</div><h1>${route === "buffer" ? "Buffer Making" : "S/IS Making"}</h1><p class="subtitle">${route === "buffer" ? "One recipe. One final volume. Every component accounted for." : "Single standards and coordinated cocktails, with a traceable calculation for every transfer."}</p></div><div class="actions">${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}${e.dirty ? badge("Unsaved changes") : ""}${button("new", "New preparation")}${button("save", "Save Preparation Record", "primary")}</div></div>${e.inputs.demo ? '<div class="notice warning"><strong>Demo data</strong> — Example values for testing only. This preparation remains marked as demo in saved records, JSON, and printouts.</div>' : ""}${e.snapshot ? `<div class="notice saved-banner"><strong>Saved record reopened.</strong> Saved results and rule version ${escape(e.snapshot.ruleVersion)} are preserved. Editing an input recalculates results and requires a new review.${e.snapshot.imported ? " Imported records require local review." : ""}<details><summary>View saved snapshot</summary><pre>${escape(JSON.stringify(e.snapshot, null, 2))}</pre></details></div>` : ""}`;
+  return `<div class="title-row"><div><div class="eyebrow">PREPARATION WORKSPACE</div><h1>${route === "buffer" ? "Buffer Making" : "S/IS Making"}</h1><p class="subtitle">${route === "buffer" ? "One recipe. One final volume. Every component accounted for." : "Single standards and coordinated cocktails, with a traceable calculation for every transfer."}</p></div><div class="actions">${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}${e.dirty ? badge("Unsaved changes") : ""}${button("new", "New preparation")}${button("save", "Save Preparation Record", "primary")}</div></div>${e.inputs.demo ? '<div class="notice warning"><strong>Demo data</strong> — Example values for testing only. This preparation remains marked as demo in saved records and Excel workbooks.</div>' : ""}${e.snapshot ? `<div class="notice saved-banner"><strong>Saved record reopened.</strong> Saved results and rule version ${escape(e.snapshot.ruleVersion)} are preserved. Editing an input recalculates results and requires a new review.${e.snapshot.imported ? " Imported records require local review." : ""}<details><summary>View saved snapshot</summary><pre>${escape(JSON.stringify(e.snapshot, null, 2))}</pre></details></div>` : ""}`;
+}
+function inventoryColumn(header) {
+  const key = Object.keys(inventory.mapping || {}).find((k) => inventory.mapping[k] === header);
+  if (key === "name") return { width: 360, cls: "chemical-column" };
+  if (["id", "lot", "cas", "barcode", "vendorId"].includes(key)) return { width: key === "id" ? 125 : 175, cls: "identifier-column" };
+  return { width: 200, cls: "" };
 }
 function inventoryPanel() {
   if (inventoryLoading)
-    return '<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body" role="status">Reading inventory… Please wait before selecting a worksheet or component.</div></section>';
-  const mapping = inventory?.mapping || {};
-  const options = [["", "Not mapped"], ...(inventory?.headers || []).map((h) => [h, h])];
-  const matches = inventory ? matchingRows(inventory.rows, mapping, query) : [];
-  const map = (key, label) =>
-    `<label class="field">${label}<select data-map="${key}" id="map-${key}">${options.map(([v, l]) => `<option value="${escape(v)}" ${mapping[key] === v ? "selected" : ""}>${escape(l)}</option>`).join("")}</select></label>`;
-  return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2>${inventory ? badge(`${inventory.rows.length} entries`) : badge("CSV / XLSX")}</div><div class="panel-body"><div class="grid three"><label class="field">Import chemical inventory<input class="file-input" type="file" id="inventory-file" accept=".csv,.tsv,.xlsx"></label>${workbook.length ? `<label class="field">Worksheet<select id="sheet-index">${workbook.map((s, i) => `<option value="${i}" ${sheetIndex === i ? "selected" : ""}>${escape(s.name)}</option>`).join("")}</select></label><label class="field">Header row (1-based)<input id="header-row" type="number" min="1" value="${headerRow}"></label>` : '<div><p class="help">Select a file, choose the worksheet and header row, then map its columns. Original fields are retained; formulas are never executed.</p></div><div>' + button("demo-inventory", "Load demo inventory") + "</div>"}</div>${
+    return '<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body" role="status">Reading inventory…</div></section>';
+  const matches = inventory ? matchingRows(inventory.rows, inventory.mapping, query) : [];
+  const columns = inventory?.headers.map((h) => ({ header: h, ...inventoryColumn(h) })) || [];
+  const width = 160 + columns.reduce((n, c) => n + c.width, 0);
+  return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2>${inventory ? badge(`${inventory.rows.length} entries`) : badge("CSV / XLSX")}</div><div class="panel-body"><div class="inventory-upload"><label class="field">Import chemical inventory<input class="file-input" type="file" id="inventory-file" accept=".csv,.tsv,.xlsx"></label>${!inventory ? button("demo-inventory", "Load demo inventory") : ""}</div><p class="help">The configured inventory template is imported automatically. MW and Density may be supplied later in each component. Imported data stays in this browser.</p>${
     inventory
-      ? `<p class="help">Source: ${escape(inventory.source)}. All ${inventory.headers.length} original columns retained. Stored only in this browser.</p><div class="grid">${map("name", "Chemical name column")}${map("cas", "CAS column")}${map("barcode", "Barcode column")}${map("mw", "MW column (g/mol)")}${map("density", "Density column (g/mL)")}</div><div class="divider"></div><label class="field">Find a chemical by name, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search mapped inventory fields…" autocomplete="off"></label>${
+      ? `<p class="help" role="status">Imported: <strong>${escape(inventory.source)}</strong> · ${inventory.rows.length} entries${inventory.encoding ? ` · Decoded as ${escape(inventory.encoding)}` : ""}</p><label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory…" autocomplete="off"></label>${
           query
-            ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " · Showing the first 30; refine your search." : ""}</p>${
+            ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " · Showing the first 30; refine your search." : ""} · Click a cell to view and copy its full contents.</p>${
                 matches.length
-                  ? `<div class="table-wrap"><table class="inventory-table"><thead><tr><th>Selection</th>${inventory.headers.map((h) => `<th>${escape(h)}</th>`).join("")}</tr></thead><tbody>${matches
+                  ? `<div class="table-wrap inventory-results-wrap"><table class="inventory-results" style="width:${width}px"><colgroup><col style="width:160px">${columns.map((c) => `<col style="width:${c.width}px">`).join("")}</colgroup><thead><tr><th><span class="two-line">Selection</span></th>${columns.map((c) => `<th class="${c.cls}"><button class="cell-peek" data-action="inventory-header" data-header="${escape(c.header)}" title="${escape(c.header)}"><span class="two-line">${escape(c.header)}</span></button></th>`).join("")}</tr></thead><tbody>${matches
                       .slice(0, 30)
                       .map(
                         (row) =>
-                          `<tr><td>${button("add-component", "Add component", "small", `data-index="${inventory.rows.indexOf(row)}" ${!mapping.name ? "disabled" : ""}`)}</td>${inventory.headers.map((h) => `<td>${escape(row[h])}</td>`).join("")}</tr>`
+                          `<tr><td>${button("add-component", "Add component", "small add-component", `data-index="${inventory.rows.indexOf(row)}"`)}</td>${columns.map((c) => `<td class="${c.cls}"><button class="cell-peek" data-action="inventory-cell" data-index="${inventory.rows.indexOf(row)}" data-header="${escape(c.header)}" title="${escape(row[c.header])}"><span class="two-line">${escape(row[c.header])}</span></button></td>`).join("")}</tr>`,
                       )
                       .join("")}</tbody></table></div>`
-                  : '<div class="empty">No matching inventory entries. Check column mapping or refine your search.</div>'
+                  : '<div class="empty">No matching inventory entries. Refine your search.</div>'
               }`
             : ""
         }`
@@ -165,12 +175,37 @@ function bufferComponent(c, i, result) {
     r = result || calculateBufferComponent(c, editor().inputs.volume, editor().inputs.volumeUnit);
   const method = r.method || c.method,
     force = r.forcedStock;
-  return `<section class="panel"><div class="panel-heading"><h2>${escape(c.name)} ${badge(`Component ${i + 1}`)}</h2>${button("remove-component", "Remove component", "small danger", `data-index="${i}"`)}</div><div class="snapshot" aria-label="Selected inventory row">${Object.entries(
-    c.inventory
+  const observation = (c.form === "pure-liquid" && method !== "existing") || c.form === "solution";
+  const stockObservation = c.form === "pure-liquid" && method === "new";
+  const byMass = stockObservation ? (c.stockObservationMethod || "mass") === "mass" : c.observationMethod === "mass";
+  let actualInputs;
+  if (method === "direct") {
+    actualInputs = quantity(`${p}.actualMass`, "Observed Mass — Measured", `${p}.massUnit`, ["mg", "g"]);
+    if (c.form === "pure-liquid") actualInputs += quantity(`${p}.actualLiquid`, "Observed Volume — Measured", `${p}.liquidUnit`, ["µL", "mL"]);
+  } else if (method === "new") {
+    actualInputs =
+      quantity(`${p}.actualMass`, "Stock Actual Mass — Measured", `${p}.massUnit`, units.mass) +
+      (stockObservation ? quantity(`${p}.actualLiquid`, "Stock Pure-liquid Volume — Measured", `${p}.liquidUnit`, ["µL", "mL"]) : "") +
+      quantity(`${p}.stockVolume`, "Stock Final Solution Volume", `${p}.stockVolumeUnit`, units.volume) +
+      quantity(`${p}.actualTransfer`, "Observed Stock Transfer Volume (optional)", `${p}.transferUnit`, ["µL", "mL"]);
+  } else {
+    actualInputs =
+      quantity(`${p}.knownConcentration`, "Known Stock Concentration", `${p}.knownUnit`, units.concentration) +
+      quantity(`${p}.available`, "Available Existing Stock Volume", `${p}.availableUnit`, units.volume);
+    if (c.form === "solution") actualInputs += quantity(`${p}.actualMass`, "Observed Solution Mass — Measured", `${p}.massUnit`, ["mg", "g"]);
+    actualInputs += quantity(`${p}.actualTransfer`, "Observed Stock Transfer Volume (optional)", `${p}.transferUnit`, ["µL", "mL"]);
+  }
+  const deviation =
+    method === "direct"
+      ? `<div class="result-strip mass-error-strip"><div><small>Mass Deviation</small><strong>${fmt(r.massDeviationMg, true)} mg</strong></div><div><small>Mass Error (%)</small><strong>${fmt(r.massErrorPercent, true)}%</strong></div></div><p class="help">Positive = more mass than target; negative = less mass than target. No acceptance threshold is applied.${r.massErrorBasis === "Calculated from observed volume" ? " Mass error is calculated from observed volume." : ""}</p>`
+      : "";
+  return `<section class="panel component-panel"><div class="panel-heading"><h2>${escape(c.name)} ${badge(`Component ${i + 1}`)}</h2>${button("remove-component", "Remove component", "small danger", `data-index="${i}"`)}</div><div class="snapshot" aria-label="Selected inventory row">${Object.entries(
+    c.inventory,
   )
-    .map(([k, v]) => `<span><b>${escape(k)}</b>${escape(v) || "—"}</span>`)
+    .filter(([, v]) => isMeaningful(v))
+    .map(([k, v]) => `<span><b>${escape(k)}</b>${escape(v)}</span>`)
     .join(
-      ""
+      "",
     )}<span><b>Inventory source</b>${escape(c.inventorySource)}</span></div><div class="panel-body"><div class="grid">${input(`${p}.mw`, "Molecular Weight (g/mol)")}${select(
     `${p}.form`,
     "Physical Form",
@@ -179,8 +214,8 @@ function bufferComponent(c, i, result) {
       ["solid", "Solid"],
       ["pure-liquid", "Pure liquid"],
       ["solution", "Solution of known concentration"],
-    ]
-  )}${c.form === "pure-liquid" ? input(`${p}.density`, "Density (g/mL)") : ""}${quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration)}</div><p class="help">Verify the exact salt and hydrate form from the selected inventory entry. Molecular weight, physical form, and density are never guessed from a name.</p><div class="result-strip"><div><small>Calculated Required Mass</small><strong>${fmt(r.requiredMg)} <small style="display:inline">mg</small></strong></div>${r.requiredLiquidUL != null ? `<div><small>Pure-liquid volume at target</small><strong>${fmt(r.requiredLiquidUL)} µL</strong></div>` : ""}<div><small>Actual final concentration</small><strong>${fmt(r.actualMM)} mM</strong></div></div>${force ? '<div class="notice warning"><strong>Stock required.</strong> Required mass is below 100 mg. Direct weighing is disabled; use a new stock or a confirmed existing stock.</div>' : ""}<div class="grid three">${select(
+    ],
+  )}${c.form === "pure-liquid" || c.form === "solution" ? input(`${p}.density`, c.form === "solution" ? "Solution Density (g/mL; required for By Mass)" : "Density (g/mL)") : ""}${quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration)}</div><p class="help">Verify the exact salt and hydrate form. Molecular weight, physical form, and density are never inferred from a name.</p><div class="result-strip"><div><small>Target Mass (Required Mass)</small><strong>${fmt(r.requiredMg)} mg</strong></div>${r.requiredLiquidUL != null ? `<div><small>Target Liquid Volume</small><strong>${fmt(r.requiredLiquidUL)} µL</strong></div>` : ""}<div><small>Actual Final Concentration</small><strong>${fmt(r.actualMM)} mM</strong></div></div>${force ? '<div class="notice warning"><strong>Stock required.</strong> Required mass is below 100 mg. Use a new stock or a confirmed existing stock.</div>' : ""}<div class="grid three">${select(
     `${p}.method`,
     "Preparation Method",
     c.form === "solution"
@@ -194,8 +229,15 @@ function bufferComponent(c, i, result) {
             ["direct", "Direct preparation"],
             ["new", "Prepare new stock"],
             ["existing", "Use confirmed existing stock"],
-          ]
-  )}</div><h3 class="subhead">Actual Preparation Inputs</h3><div class="grid">${method === "direct" ? (c.form === "pure-liquid" ? quantity(`${p}.actualLiquid`, "Actual pure liquid volume", `${p}.liquidUnit`, units.volume) : quantity(`${p}.actualMass`, "Actual weighed mass", `${p}.massUnit`, units.mass)) : method === "new" ? quantity(`${p}.actualMass`, "Actual weighed mass for stock", `${p}.massUnit`, units.mass) + quantity(`${p}.stockVolume`, "Stock final solution volume", `${p}.stockVolumeUnit`, units.volume) : quantity(`${p}.knownConcentration`, "Known stock concentration", `${p}.knownUnit`, units.concentration) + quantity(`${p}.available`, "Available stock volume", `${p}.availableUnit`, units.volume)}${method !== "direct" ? quantity(`${p}.actualTransfer`, "Actual stock volume transferred", `${p}.transferUnit`, units.volume) : ""}</div>${method === "existing" ? `<p>${checkbox(`${p}.confirmed`, "I confirm the existing stock concentration and units.")}</p>` : ""}${method !== "direct" ? `<div class="result-strip"><div><small>Stock concentration</small><strong>${fmt(r.stockMM)} mM</strong></div><div><small>Calculated stock transfer volume</small><strong>${fmt(r.transferML)} mL</strong></div></div>` : ""}${messages(r.errors)}${formula(r.formulas)}</div><div class="review-bar"><div>${checkbox(`${p}.reviewed`, "Calculation Review: inputs, units, and formula checked", !!r.errors.length)}</div>${badge(c.reviewed ? "Checked" : "Needs recheck", c.reviewed ? "teal" : "amber")}</div></section>`;
+          ],
+  )}${
+    observation
+      ? select(`${p}.${stockObservation ? "stockObservationMethod" : "observationMethod"}`, "Observation Method", [
+          ["mass", "By Mass"],
+          ["volume", "By Volume"],
+        ])
+      : ""
+  }</div><h3 class="subhead">Actual Preparation Inputs</h3><div class="grid">${actualInputs}</div>${observation ? `<p class="help">Both measured values may be recorded. Only ${byMass ? "measured mass" : "measured volume"} is used as the ${stockObservation ? "stock preparation" : "actual concentration"} basis; values are not averaged or counted twice.${c.form === "solution" ? " Solution mass is not solute mass. By Mass requires solution density and a known solution concentration." : ""}</p>` : ""}${method === "existing" ? `<p>${checkbox(`${p}.confirmed`, "I confirm the existing stock concentration and units.")}</p>` : ""}${r.calculatedMassMg != null || r.calculatedVolumeUL != null ? `<div class="result-strip">${r.calculatedMassMg != null ? `<div><small>Mass — Calculated from Density</small><strong>${fmt(r.calculatedMassMg)} mg</strong></div>` : ""}${r.calculatedVolumeUL != null ? `<div><small>Volume — Calculated from Density</small><strong>${fmt(r.calculatedVolumeUL)} µL</strong></div>` : ""}</div>` : ""}${method !== "direct" ? `<div class="result-strip"><div><small>Stock Concentration</small><strong>${fmt(r.stockMM)} mM</strong></div><div><small>Calculated Stock Transfer Volume</small><strong>${fmt(r.stockTransferUL ?? (r.transferML == null ? null : r.transferML * 1000))} µL</strong></div></div><p class="help">Observed transfer volume is optional. Actual final concentration is left blank until an observed transfer is recorded.</p>` : ""}${r.stockCalculatedMassMg != null || r.stockCalculatedVolumeUL != null ? `<div class="result-strip">${r.stockCalculatedMassMg != null ? `<div><small>Stock Mass — Calculated from Density</small><strong>${fmt(r.stockCalculatedMassMg)} mg</strong></div>` : ""}${r.stockCalculatedVolumeUL != null ? `<div><small>Stock Pure-liquid Volume — Calculated from Density</small><strong>${fmt(r.stockCalculatedVolumeUL)} µL</strong></div>` : ""}</div>` : ""}${deviation}${messages(r.errors)}${formula(r.formulas)}</div><div class="review-bar">${checkbox(`${p}.reviewed`, "Calculation Review: inputs, units, and formula checked", !!r.errors.length)}${badge(c.reviewed ? "Checked" : "Needs recheck", c.reviewed ? "teal" : "amber")}</div></section>`;
 }
 function buffer() {
   const b = editor().inputs,
@@ -221,21 +263,21 @@ function stockCard(c, i, role) {
       ["weight", "Weight / MW"],
       ["qnmr-amount", "qNMR — amount (µmol / nmol)"],
       ["qnmr-concentration", "qNMR — concentration + sample volume"],
-    ]
+    ],
   )}${s.source === "weight" ? quantity(`${p}.mass`, "Actual compound mass", `${p}.massUnit`, units.mass) : s.source === "qnmr-amount" ? quantity(`${p}.amount`, "qNMR amount (not concentration)", `${p}.amountUnit`, ["µmol", "nmol"]) : quantity(`${p}.qConcentration`, "qNMR concentration", `${p}.qUnit`, units.molar) + quantity(`${p}.sampleVolume`, "qNMR corresponding sample volume", `${p}.sampleUnit`, units.volume)}${select(
     `${p}.volumeMode`,
     "Preparation calculation",
     [
       ["manual", "Enter volume → calculate concentration"],
       ["target", "Enter target concentration → calculate volume"],
-    ]
+    ],
   )}${s.volumeMode === "manual" ? quantity(`${p}.prepVolume`, s.volumeBasis === "solvent" ? "Solvent Added (approximation)" : "Final Solution Volume", `${p}.prepUnit`, units.volume) : quantity(`${p}.desiredConcentration`, "Target single-standard concentration", `${p}.desiredUnit`, units.molar)}${select(
     `${p}.volumeBasis`,
     "Volume basis",
     [
       ["final", "Final Solution Volume"],
       ["solvent", "Solvent Added (volume approximation)"],
-    ]
+    ],
   )}${quantity(`${p}.available`, "Available stock volume (optional)", `${p}.availableUnit`, units.volume, "Defaults to prepared volume")}${quantity(`${p}.target`, "Target Concentration in Cocktail", `${p}.targetUnit`, units.molar)}</div><p class="help">Use the volume on the vial when available. Preparation volume must be &lt;3000 µL. Target refers to the final cocktail, before any further assay dilution. No purity correction is applied.</p><div class="result-strip"><div><small>Stock Concentration (mM)</small><strong>${fmt(r.stockMM)}</strong></div><div><small>Preparation volume (µL)</small><strong>${fmt(r.prepUL)}</strong></div></div>${messages(r.errors)}${messages(r.warnings, "warning")}${formula(r.formulas)}</div>`;
 }
 function cocktailTable(c, r) {
@@ -248,7 +290,7 @@ function cocktailTable(c, r) {
       return `<tr><td><strong>${escape(c.stocks[role].name) || role}</strong><br>${badge(role)}</td><td>${fmt(row?.stock?.stockMM)}</td><td>${fmt(row?.targetUM)}</td><td>${row?.massUG == null ? (c.stocks[role].mw ? "—" : "Missing MW") : fmt(row.massUG)}</td><td>${fmt(row?.perAssayUL)}</td><td><strong>${fmt(row?.transferUL)}</strong></td></tr>`;
     })
     .join(
-      ""
+      "",
     )}</tbody></table></div><div class="solvent"><div><strong style="font-size:13px">Solvent Volume to Add (µL)</strong><br><span class="help">Bring to the final cocktail volume after adding all stocks.</span></div><strong>${fmt(r.solventUL)}</strong></div>`;
 }
 function volumePlan(r) {
@@ -260,7 +302,7 @@ function volumePlan(r) {
       return `<tr class="${p && p.selectedVolume !== p.originalVolume ? "adjusted" : ""}"><td><strong>${escape(c.name) || "Unnamed cocktail"}</strong></td><td>${fmt(p?.originalVolume)}</td><td>${fmt(p?.proposedVolume)}</td><td class="final">${fmt(p?.selectedVolume)}</td><td>${fmt(p?.originalIS)}</td><td>${fmt(p?.finalIS)}</td><td>${escape(p?.reason || "Complete valid IS concentration and original volume inputs to calculate a plan.")}</td></tr>`;
     })
     .join(
-      ""
+      "",
     )}</tbody></table></div><div class="plan-confirm"><span class="help">Changing any preparation input invalidates this confirmation and the record review.</span>${button("confirm-plan", s.confirmed ? "Volume plan confirmed" : "Confirm volume plan", s.confirmed ? "" : "primary", r.plan?.length !== s.cocktails.length ? "disabled" : "")}</div></div></section>`;
 }
 function sis() {
@@ -272,7 +314,7 @@ function sis() {
     s.cocktails
       .map(
         (c, i) =>
-          `<section class="panel"><div class="panel-heading"><h2><span class="number">${String(i + 1).padStart(2, "0")}</span>${escape(c.name) || `Cocktail ${i + 1}`}</h2>${button("remove-cocktail", "Remove cocktail", "small danger", `data-index="${i}"`)}</div><div class="panel-body"><div class="grid three">${input(`cocktails.${i}.name`, "Cocktail Name")}${quantity(`cocktails.${i}.volume`, "Original Planned Cocktail Volume", `cocktails.${i}.volumeUnit`, units.volume)}${quantity(`cocktails.${i}.assayVolume`, "Cocktail Volume per Assay", `cocktails.${i}.assayUnit`, units.volume)}</div><div class="divider"></div><div class="stock-grid">${stockCard(c, i, "S")}${stockCard(c, i, "IS")}</div></div></section>`
+          `<section class="panel"><div class="panel-heading"><h2><span class="number">${String(i + 1).padStart(2, "0")}</span>${escape(c.name) || `Cocktail ${i + 1}`}</h2>${button("remove-cocktail", "Remove cocktail", "small danger", `data-index="${i}"`)}</div><div class="panel-body"><div class="grid three">${input(`cocktails.${i}.name`, "Cocktail Name")}${quantity(`cocktails.${i}.volume`, "Original Planned Cocktail Volume", `cocktails.${i}.volumeUnit`, units.volume)}${quantity(`cocktails.${i}.assayVolume`, "Cocktail Volume per Assay", `cocktails.${i}.assayUnit`, units.volume)}</div><div class="divider"></div><div class="stock-grid">${stockCard(c, i, "S")}${stockCard(c, i, "IS")}</div></div></section>`,
       )
       .join("") +
     `<div class="actions" style="margin-bottom:24px">${button("add-cocktail", "+ Add independent cocktail")}</div>` +
@@ -289,43 +331,10 @@ function sis() {
 function review(r) {
   const e = editor(),
     ready = !r.errors.length && (route !== "buffer" || e.inputs.components.every((c) => c.reviewed));
-  return `<section class="panel"><div class="panel-heading"><h2>Calculation review &amp; record</h2>${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}</div><div class="panel-body">${messages(r.errors)}${route === "buffer" && e.inputs.components.some((c) => !c.reviewed) ? '<p class="help">Check Calculation Review for each component after verifying the inputs.</p>' : ""}<p class="help">Drafts may contain incomplete inputs. Reviewed records require valid calculations${route === "sis" ? ", sufficient stocks, and a confirmed volume plan" : ", actual preparation inputs, and checked components"}. Saving and imports use only this browser. Rules ${RULE_VERSION}.</p><div class="actions">${button("review", "Mark Reviewed", "", !ready ? "disabled" : "")}${button("save", "Save Preparation Record", "primary")}${button("export-current", "Export JSON")}${button("print", route === "sis" ? "Print operation sheet" : "Print preparation sheet", "", route === "sis" && !e.inputs.confirmed ? "disabled" : "")}</div></div></section>`;
+  return `<section class="panel"><div class="panel-heading"><h2>Calculation review &amp; record</h2>${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}</div><div class="panel-body">${messages(r.errors)}${route === "buffer" && e.inputs.components.some((c) => !c.reviewed) ? '<p class="help">Check Calculation Review for each component after verifying the inputs.</p>' : ""}<p class="help">Drafts may contain incomplete inputs. Reviewed records require valid calculations${route === "sis" ? ", sufficient stocks, and a confirmed volume plan" : ", actual preparation inputs, and checked components"}. Saving and imports use only this browser. Rules ${RULE_VERSION}.</p><div class="actions">${button("review", "Mark Reviewed", "", !ready ? "disabled" : "")}${button("save", "Save Preparation Record", "primary")}${button("export-excel", "Export Preparation Excel")}</div></div></section>`;
 }
 function recordsPage() {
-  return `<div class="title-row"><div><div class="eyebrow">YOUR LOCAL NOTEBOOK</div><h1>Preparation Records</h1><p class="subtitle">Reopen, edit, or duplicate a preparation. Export JSON to back up your records.</p></div><label class="button primary">Import JSON<input type="file" accept=".json,application/json" id="record-file" hidden></label></div><div class="notice">Records and imported data are saved only in this browser. No backend or company system is connected. Imported records open as Draft and retain their original result snapshot.</div><section class="panel"><div class="panel-heading"><h2>Saved preparations</h2>${badge(`${records.length} records`)}</div>${records.length ? `<div class="table-wrap"><table class="inventory-table"><thead><tr><th>Preparation</th><th>Module</th><th>Status</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>${records.map((r) => `<tr><td><strong>${escape(r.name)}</strong><br>${r.demo ? badge("Demo data", "amber") : ""}</td><td>${r.kind === "buffer" ? "Buffer Making" : "S/IS Making"}</td><td>${badge(r.status, r.status === "Reviewed" ? "teal" : "amber")}</td><td>${escape(r.updatedAt?.replace("T", " ").slice(0, 16))} UTC<br><span class="help">Rules ${escape(r.ruleVersion)}</span></td><td><div class="actions">${button("open-record", "Open", "small", `data-id="${escape(r.id)}"`)}${button("copy-record", "Copy as new", "small", `data-id="${escape(r.id)}"`)}${button("export-record", "JSON", "small", `data-id="${escape(r.id)}"`)}${button("delete-record", "Delete", "small danger", `data-id="${escape(r.id)}"`)}</div></td></tr>`).join("")}</tbody></table></div>` : '<div class="panel-body"><div class="empty">No saved records yet. Start a preparation and select Save Preparation Record.</div></div>'}</section>`;
-}
-function printSheet() {
-  if (!["buffer", "sis"].includes(route)) return "";
-  const e = editor(),
-    r = results(),
-    b = e.inputs;
-  return `<article class="operation"><h1>Lab Preparation Workbench</h1><h2>${escape(b.name) || "Untitled preparation"}</h2><p>${route === "buffer" ? "Buffer Making" : "S/IS Making"} · ${escape(e.status)}${b.demo ? " · Demo data" : ""} · Rules ${escape(e.snapshot?.ruleVersion || RULE_VERSION)}</p><p>Browser local record · Printed ${new Date().toISOString()}</p>${messages(r.errors)}${messages(r.warnings, "warning")}${
-    route === "buffer"
-      ? `<h2>Final Buffer Volume: ${escape(b.volume)} ${escape(b.volumeUnit)}</h2><p><strong>Bring to the final buffer volume after adding all stocks and other liquids.</strong></p>${b.components
-          .map((c, i) => {
-            const cr = r.rows?.[i] || {};
-            return `<section class="print-block"><h3>${i + 1}. ${escape(c.name)} · ${escape(c.form)}</h3><p>Inventory snapshot: ${escape(JSON.stringify(c.inventory))}</p><p>MW: ${escape(c.mw)} g/mol · Target: ${escape(c.target)} ${escape(c.targetUnit)} · Required mass: ${fmt(cr.requiredMg)} mg · Method: ${escape(cr.method)}${c.form === "pure-liquid" ? ` · Density: ${escape(c.density)} g/mL` : ""}</p><p>Actual mass: ${escape(c.actualMass) || "—"} ${escape(c.massUnit)} · Actual liquid: ${escape(c.actualLiquid) || "—"} ${escape(c.liquidUnit)} · Stock final volume: ${escape(c.stockVolume) || "—"} ${escape(c.stockVolumeUnit)}</p><p>Stock concentration: ${fmt(cr.stockMM)} mM · Stock transfer required: ${fmt(cr.transferML)} mL · Actual stock transfer: ${escape(c.actualTransfer) || "—"} ${escape(c.transferUnit)} · Actual final concentration: ${fmt(cr.actualMM)} mM</p></section>`;
-          })
-          .join("")}`
-      : `${
-          r.cocktails
-            ?.map((cr) => {
-              const c = b.cocktails.find((c) => c.id === cr.id);
-              if (!c) return "";
-              return `<section><h2>${escape(c.name)} · Final Cocktail Volume: ${fmt(cr.finalUL)} µL</h2><p>Cocktail Volume per Assay: ${fmt(cr.assayUL)} µL · Original Volume: ${fmt(cr.plan?.originalVolume)} µL · Proposed Volume: ${fmt(cr.plan?.proposedVolume)} µL · Original IS Aliquot: ${fmt(cr.plan?.originalIS)} µL · Final IS Aliquot: ${fmt(cr.plan?.finalIS)} µL</p><p><strong>${escape(cr.plan?.reason)}</strong></p>${[
-                "S",
-                "IS",
-              ]
-                .map((role) => {
-                  const st = c.stocks[role],
-                    sr = calculateSingle(st);
-                  return `<p>${role}: ${escape(st.name)} · MW ${escape(st.mw) || "missing"} g/mol · Lot ${escape(st.lot)} · Prepared ${escape(st.date)} · Solvent ${escape(st.solvent)} · Source ${escape(st.source)} · Mass ${escape(st.mass) || "—"} ${escape(st.massUnit)} · qNMR amount ${escape(st.amount) || "—"} ${escape(st.amountUnit)} · qNMR concentration ${escape(st.qConcentration) || "—"} ${escape(st.qUnit)} at sample volume ${escape(st.sampleVolume) || "—"} ${escape(st.sampleUnit)} · ${st.volumeBasis === "solvent" ? "Solvent Added (volume approximation)" : "Final Solution Volume"} ${fmt(sr.prepUL)} µL</p>`;
-                })
-                .join("")}${cocktailTable(c, cr)}${messages(cr.errors)}</section>`;
-            })
-            .join("") || ""
-        }`
-  }<p>Reviewed by: ____________________ &nbsp; Date: ____________________</p><p>Rules: Minimum IS ${escape(r.rules?.minimumISuL)} µL; IS Scale-Up Threshold ${escape(r.rules?.thresholdISuL)} µL; stock required below 100 mg; final volume includes all liquid additions.</p></article>`;
+  return `<div class="title-row"><div><div class="eyebrow">YOUR LOCAL NOTEBOOK</div><h1>Preparation Records</h1><p class="subtitle">Reopen, edit, or duplicate a preparation. Export an Excel preparation workbook.</p></div><label class="button primary">Import JSON<input type="file" accept=".json,application/json" id="record-file" hidden></label></div><div class="notice">Records and imported data are saved only in this browser. No backend or company system is connected. Imported records open as Draft and retain their original result snapshot.</div><section class="panel"><div class="panel-heading"><h2>Saved preparations</h2>${badge(`${records.length} records`)}</div>${records.length ? `<div class="table-wrap"><table class="inventory-table"><thead><tr><th>Preparation</th><th>Module</th><th>Status</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>${records.map((r) => `<tr><td><strong>${escape(r.name)}</strong><br>${r.demo ? badge("Demo data", "amber") : ""}</td><td>${r.kind === "buffer" ? "Buffer Making" : "S/IS Making"}</td><td>${badge(r.status, r.status === "Reviewed" ? "teal" : "amber")}</td><td>${escape(r.updatedAt?.replace("T", " ").slice(0, 16))} UTC<br><span class="help">Rules ${escape(r.ruleVersion)}</span></td><td><div class="actions">${button("open-record", "Open", "small", `data-id="${escape(r.id)}"`)}${button("copy-record", "Copy as new", "small", `data-id="${escape(r.id)}"`)}${button("export-record", "Excel", "small", `data-id="${escape(r.id)}"`)}${button("delete-record", "Delete", "small danger", `data-id="${escape(r.id)}"`)}</div></td></tr>`).join("")}</tbody></table></div>` : '<div class="panel-body"><div class="empty">No saved records yet. Start a preparation and select Save Preparation Record.</div></div>'}</section>`;
 }
 function render() {
   const active = document.activeElement,
@@ -336,7 +345,7 @@ function render() {
     stale = opened && opened.ruleVersion !== RULE_VERSION;
   app.innerHTML =
     header() +
-    `<main class="shell" id="main"><div class="breadcrumb"><a href="#home">Workbench</a> &nbsp;/&nbsp; ${escape({ home: "Overview", buffer: "Buffer Making", sis: "S/IS Making", records: "Records" }[route] || "Overview")}</div><div class="workspace">${storageError ? messages([storageError]) : ""}${notice ? `<div class="notice">${escape(notice)}</div>` : ""}${stale ? `<h1>${escape(opened.name)}</h1><div class="notice warning">This record uses rules ${escape(opened.ruleVersion)}. Saved results are preserved as a read-only snapshot. Recalculate explicitly to edit under current rules ${RULE_VERSION}.</div>${button("recalculate", "Recalculate with current rules", "primary")}<pre>${escape(JSON.stringify(opened, null, 2))}</pre>` : route === "home" ? home() : route === "buffer" ? buffer() : route === "sis" ? sis() : recordsPage()}</div>${stale ? "" : printSheet()}<footer class="footer"><span>Lab Preparation Workbench · Browser local storage · Export records for backup</span><span>Explicit units. Traceable calculations. &nbsp; Rules ${RULE_VERSION}</span></footer></main>`;
+    `<main class="shell" id="main"><div class="breadcrumb"><a href="#home">Workbench</a> &nbsp;/&nbsp; ${escape({ home: "Overview", buffer: "Buffer Making", sis: "S/IS Making", records: "Records" }[route] || "Overview")}</div><div class="workspace">${storageError ? messages([storageError]) : ""}${notice ? `<div class="notice">${escape(notice)}</div>` : ""}${stale ? `<h1>${escape(opened.name)}</h1><div class="notice warning">This record uses rules ${escape(opened.ruleVersion)}. Saved results are preserved as a read-only snapshot. Recalculate explicitly to edit under current rules ${RULE_VERSION}.</div>${button("recalculate", "Recalculate with current rules", "primary")}${button("export-excel", "Export Preparation Excel")}<pre>${escape(JSON.stringify(opened, null, 2))}</pre>` : route === "home" ? home() : route === "buffer" ? buffer() : route === "sis" ? sis() : recordsPage()}</div><footer class="footer"><span>Lab Preparation Workbench · Browser local storage · Export preparation Excel files</span><span>Explicit units. Traceable calculations. &nbsp; Rules ${RULE_VERSION}</span></footer><dialog id="detail-dialog"><h2 id="detail-title"></h2><textarea id="detail-content" readonly aria-label="Full content"></textarea><div class="actions">${button("copy-detail", "Copy full content")}${button("close-detail", "Close")}</div></dialog></main>`;
   if (focus) {
     const next = document.getElementById(focus);
     if (next) {
@@ -365,13 +374,22 @@ function openRecord(r) {
   };
   navigate(r.kind);
 }
-function download(r) {
-  const blob = new Blob([JSON.stringify(r, null, 2)], { type: "application/json" }),
+async function download(r) {
+  const workbook = await createPreparationWorkbook(r);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
     a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${r.demo ? "demo-" : ""}${r.kind}-${r.id}.json`;
+  a.download = `${r.demo ? "demo-" : ""}${r.kind}-${r.id}.xlsx`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function showDetail(title, value) {
+  document.querySelector("#detail-title").textContent = title;
+  document.querySelector("#detail-content").value = String(value ?? "");
+  document.querySelector("#detail-dialog").showModal();
 }
 function persistInventory() {
   try {
@@ -379,13 +397,6 @@ function persistInventory() {
   } catch {
     toast("Inventory is available for this session, but browser storage is full. Selected row snapshots are still included when saving a record.");
   }
-}
-function useSheet() {
-  const table = tableFromRows(workbook[sheetIndex].rows, headerRow);
-  inventory = { ...table, mapping: suggestMapping(table.headers), source: `${useSheet.filename} / ${workbook[sheetIndex].name}`, demo: false };
-  persistInventory();
-  query = "";
-  render();
 }
 app.addEventListener("input", (event) => {
   const target = event.target;
@@ -412,29 +423,14 @@ app.addEventListener("change", async (event) => {
       inventoryLoading = true;
       render();
       try {
-        const sheets = await readInventoryFile(t.files[0]);
-        if (!sheets.length) throw new Error("No worksheets found.");
-        useSheet.filename = t.files[0].name;
-        workbook = sheets;
-        sheetIndex = 0;
-        headerRow = 1;
-        useSheet();
-        toast("Inventory imported into this browser. Map the search fields before selecting a component.");
+        inventory = await importInventory(t.files[0]);
+        persistInventory();
+        query = "";
+        toast(`Imported ${inventory.rows.length} inventory entries into this browser.`);
       } finally {
         inventoryLoading = false;
         render();
       }
-    } else if (t.id === "sheet-index") {
-      sheetIndex = Number(t.value);
-      headerRow = 1;
-      useSheet();
-    } else if (t.id === "header-row") {
-      headerRow = Number(t.value);
-      useSheet();
-    } else if (t.dataset.map) {
-      inventory.mapping[t.dataset.map] = t.value;
-      persistInventory();
-      render();
     } else if (t.id === "record-file") {
       if (!t.files[0]) return;
       const r = decodeRecord(await t.files[0].text());
@@ -462,31 +458,81 @@ app.addEventListener("change", async (event) => {
     toast(e.message);
   }
 });
-app.addEventListener("click", (event) => {
+app.addEventListener("click", async (event) => {
   const b = event.target.closest("[data-action]");
   if (!b) return;
   const action = b.dataset.action,
     e = editor();
   try {
+    if (action === "precision") {
+      showDetail("Full calculation precision", b.dataset.value);
+      return;
+    }
+    if (action === "inventory-cell") {
+      showDetail(b.dataset.header, inventory.rows[Number(b.dataset.index)][b.dataset.header]);
+      return;
+    }
+    if (action === "inventory-header") {
+      showDetail("Full column name", b.dataset.header);
+      return;
+    }
+    if (action === "close-detail") {
+      document.querySelector("#detail-dialog").close();
+      return;
+    }
+    if (action === "copy-detail") {
+      const text = document.querySelector("#detail-content");
+      try {
+        await navigator.clipboard.writeText(text.value);
+        toast("Full content copied.");
+      } catch {
+        text.select();
+        toast("Select and copy the full content using your browser.");
+      }
+      return;
+    }
     if (action === "new") {
       if (e.dirty && !confirm("Discard unsaved changes and start a new preparation?")) return;
-      editors[route] = { inputs: route === "buffer" ? blankBuffer() : blankSIS(), status: "Draft", dirty: false };
+      editors[route] = {
+        inputs: route === "buffer" ? blankBuffer() : blankSIS(),
+        status: "Draft",
+        dirty: false,
+      };
     } else if (action === "demo-inventory") {
       inventory = {
         headers: ["Chemical", "CAS", "Barcode", "MW", "Supplier", "Lot"],
         rows: [
-          { Chemical: "Sodium chloride", CAS: "7647-14-5", Barcode: "DEMO-001", MW: "58.44", Supplier: "Demo supplier", Lot: "DEMO-ONLY" },
-          { Chemical: "Glycine", CAS: "56-40-6", Barcode: "DEMO-002", MW: "75.07", Supplier: "Demo supplier", Lot: "DEMO-ONLY" },
+          {
+            Chemical: "Sodium chloride",
+            CAS: "7647-14-5",
+            Barcode: "DEMO-001",
+            MW: "58.44",
+            Supplier: "Demo supplier",
+            Lot: "DEMO-ONLY",
+          },
+          {
+            Chemical: "Glycine",
+            CAS: "56-40-6",
+            Barcode: "DEMO-002",
+            MW: "75.07",
+            Supplier: "Demo supplier",
+            Lot: "DEMO-ONLY",
+          },
         ],
-        mapping: { name: "Chemical", cas: "CAS", barcode: "Barcode", mw: "MW", density: "" },
+        mapping: {
+          name: "Chemical",
+          cas: "CAS",
+          barcode: "Barcode",
+          mw: "MW",
+          density: "",
+        },
         source: "Demo data / Example inventory",
         demo: true,
       };
-      workbook = [];
       query = "";
       persistInventory();
     } else if (action === "add-component") {
-      if (!inventory.mapping.name) throw new Error("Map a chemical name column first.");
+      if (!inventory.mapping.name) throw new Error("The inventory template is missing Chemical Name.");
       invalidate();
       e.inputs.components.push(componentFromRow(inventory.rows[Number(b.dataset.index)], inventory.mapping, inventory.source));
       if (inventory.demo) e.inputs.demo = true;
@@ -529,12 +575,10 @@ app.addEventListener("click", (event) => {
       e.dirty = false;
       e.snapshot = record;
       toast(`${record.status} preparation saved in this browser${record.demo ? " · Demo data" : ""}.`);
-    } else if (action === "export-current") {
-      download(e.snapshot && !e.dirty ? e.snapshot : makeRecord(route, e.inputs, e.status, e.id, e.createdAt));
-    } else if (action === "print") {
-      if (route === "sis" && !e.inputs.confirmed) throw new Error("Confirm the volume plan before printing an operation sheet.");
-      window.print();
-      return;
+    } else if (action === "export-excel") {
+      if (!e.id) e.id = uid();
+      if (!e.createdAt) e.createdAt = new Date().toISOString();
+      await download(e.snapshot && !e.dirty ? e.snapshot : makeRecord(route, e.inputs, e.status, e.id, e.createdAt));
     } else if (action === "recalculate") {
       invalidate();
       toast("Recalculated with current rules. Review is required.");
@@ -554,7 +598,7 @@ app.addEventListener("click", (event) => {
         return;
       }
       if (action === "export-record") {
-        download(r);
+        await download(r);
         return;
       }
       if (action === "delete-record" && confirm(`Delete "${r.name}" from this browser? Export a backup first if needed.`)) {
@@ -565,6 +609,12 @@ app.addEventListener("click", (event) => {
     render();
   } catch (error) {
     toast(`Unable to complete action: ${error.message}`);
+  }
+});
+app.addEventListener("keydown", (event) => {
+  if (["Enter", " "].includes(event.key) && event.target.matches(".calculated-value")) {
+    event.preventDefault();
+    event.target.click();
   }
 });
 window.addEventListener("hashchange", () => {

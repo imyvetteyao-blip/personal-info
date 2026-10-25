@@ -1,3 +1,4 @@
+import { INVENTORY_CONFIG, inventoryMapping } from "./inventory-config.mjs";
 export function parseCSV(text) {
   const input = text.replace(/^\uFEFF/, "");
   const firstLine = input.split(/\r?\n/)[0];
@@ -52,9 +53,12 @@ export function tableFromRows(rows, headerRow = 1) {
       .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]))),
   };
 }
-export async function readInventoryFile(file) {
+export async function readInventoryFile(file, config = INVENTORY_CONFIG) {
   if (file.size > 10e6) throw new Error("Inventory file exceeds 10 MB.");
-  if (/\.(csv|tsv)$/i.test(file.name)) return [{ name: "CSV", rows: parseCSV(await file.text()) }];
+  if (/\.(csv|tsv)$/i.test(file.name)) {
+    const decoded = decodeCSV(await file.arrayBuffer(), config.csvLegacyEncoding);
+    return [{ name: "CSV", rows: parseCSV(decoded.text), encoding: decoded.encoding }];
+  }
   if (!/\.xlsx$/i.test(file.name)) throw new Error("Select a CSV, TSV, or XLSX file. Legacy XLS is not supported.");
   if (!globalThis.ExcelJS) throw new Error("XLSX reader is unavailable. Reload the page or use CSV.");
   const workbook = new globalThis.ExcelJS.Workbook();
@@ -78,7 +82,7 @@ export async function readInventoryFile(file) {
                   ? (v.result ?? `=${v.formula || v.sharedFormula}`)
                   : v.richText
                     ? v.richText.map((t) => t.text).join("")
-                    : (v.text ?? JSON.stringify(v))
+                    : (v.text ?? JSON.stringify(v)),
         );
       }
       rows.push(row);
@@ -87,25 +91,80 @@ export async function readInventoryFile(file) {
   });
 }
 export function suggestMapping(headers) {
-  const find = (names) => headers.find((h) => names.includes(h.toLowerCase().trim())) || "";
-  return {
-    name: find(["name", "chemical", "compound", "chemical name", "reagent"]),
-    cas: find(["cas", "cas number", "cas no.", "cas #"]),
-    barcode: find(["barcode", "bar code", "id"]),
-    mw: find(["mw", "molecular weight", "mw (g/mol)"]),
-    density: find(["density", "density (g/ml)"]),
-  };
+  return inventoryMapping(headers, INVENTORY_CONFIG, false);
+}
+export function decodeCSV(buffer, legacyEncoding = INVENTORY_CONFIG.csvLegacyEncoding) {
+  const bytes = new Uint8Array(buffer);
+  const decode = (encoding) => new TextDecoder(encoding, { fatal: true }).decode(bytes);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return { text: decode("utf-16le"), encoding: "UTF-16 LE" };
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return { text: decode("utf-16be"), encoding: "UTF-16 BE" };
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    try {
+      return { text: decode("utf-8"), encoding: "UTF-8 BOM" };
+    } catch {
+      throw new Error("The CSV declares UTF-8 BOM but contains invalid UTF-8 bytes. Re-export the source file.");
+    }
+  }
+  try {
+    const text = decode("utf-8");
+    if (text.includes("\0")) throw new Error("Unexpected null bytes");
+    return { text, encoding: "UTF-8" };
+  } catch {
+    if (!legacyEncoding) throw new Error("CSV is not valid UTF-8. The source encoding must be declared in inventory-config.mjs.");
+    try {
+      const text = decode(legacyEncoding);
+      if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(text)) throw new Error("Invalid control character");
+      return { text, encoding: legacyEncoding };
+    } catch {
+      throw new Error(`CSV cannot be decoded as UTF-8 or configured ${legacyEncoding}. Re-export as UTF-8 or confirm the source encoding.`);
+    }
+  }
+}
+export async function importInventory(file, config = INVENTORY_CONFIG) {
+  const sheets = await readInventoryFile(file, config);
+  if (/\.(csv|tsv)$/i.test(file.name)) {
+    const table = tableFromRows(sheets[0].rows, config.headerRow);
+    return {
+      ...table,
+      mapping: inventoryMapping(table.headers, config),
+      source: file.name,
+      encoding: sheets[0].encoding,
+      demo: false,
+    };
+  }
+  const candidates = [],
+    failures = [];
+  for (const sheet of sheets) {
+    if (config.worksheetName && sheet.name !== config.worksheetName) continue;
+    try {
+      const table = tableFromRows(sheet.rows, config.headerRow);
+      candidates.push({
+        ...table,
+        mapping: inventoryMapping(table.headers, config),
+        source: file.name,
+        worksheet: sheet.name,
+        demo: false,
+      });
+    } catch (e) {
+      failures.push(`${sheet.name}: ${e.message}`);
+    }
+  }
+  if (candidates.length > 1)
+    throw new Error("More than one worksheet matches the inventory template. Set its exact worksheetName in inventory-config.mjs.");
+  if (!candidates.length)
+    throw new Error(failures.length ? failures.join(" ") : `Required worksheet not found: ${config.worksheetName || "inventory template"}.`);
+  return candidates[0];
 }
 export function matchingRows(rows, mapping, query) {
   const q = query.toLocaleLowerCase().trim();
   if (!q) return [];
   return rows.filter((r) =>
-    ["name", "cas", "barcode"].some(
+    ["name", "cas", "barcode", "id"].some(
       (k) =>
         mapping[k] &&
         String(r[mapping[k]] ?? "")
           .toLocaleLowerCase()
-          .includes(q)
-    )
+          .includes(q),
+    ),
   );
 }

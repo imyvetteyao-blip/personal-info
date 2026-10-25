@@ -751,48 +751,97 @@ pre {
     flex-direction: column;
   }
 }
-@media print {
-  @page {
-    size: landscape;
-    margin: 14mm;
-  }
-  body {
-    background: white;
-    font-size: 10pt;
-    color: #172f47;
-  }
-  .header,
-  .workspace,
-  .footer,
-  .toast,
-  .skip-link,
-  .breadcrumb {
-    display: none !important;
-  }
-  .shell {
-    padding: 0;
-    max-width: none;
-  }
-  .operation {
-    display: block;
-  }
-  table {
-    font-size: 9pt;
-    min-width: 0 !important;
-    table-layout: auto !important;
-  }
-  th,
-  td {
-    padding: 7px;
-  }
-  tr,
-  .print-block {
-    break-inside: avoid;
-  }
-  thead {
-    display: table-header-group;
-  }
-  .notice {
-    break-inside: avoid;
-  }
+
+/* Inventory values are display-clamped only; originals remain in the model. */
+.inventory-upload {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.inventory-upload .field {
+  flex: 1;
+  min-width: 230px;
+}
+.inventory-results-wrap {
+  margin-top: 12px;
+  max-width: 100%;
+}
+.inventory-results {
+  table-layout: fixed;
+  min-width: 100%;
+}
+.inventory-results th,
+.inventory-results td {
+  overflow: hidden;
+  overflow-wrap: normal;
+  word-break: normal;
+  vertical-align: middle;
+  padding: 12px;
+}
+.two-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: 36px;
+  line-height: 18px;
+  overflow: hidden;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+.inventory-results .identifier-column .two-line {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cell-peek {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  font-weight: inherit;
+  background: transparent;
+  color: inherit;
+}
+.cell-peek:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.inventory-results .add-component {
+  white-space: nowrap;
+  word-break: normal;
+  min-width: 130px;
+}
+.calculated-value {
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px dotted #9abbb9;
+}
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 25px;
+  width: min(700px, 90vw);
+  color: var(--ink);
+}
+dialog::backdrop {
+  background: #172f4755;
+}
+dialog textarea {
+  display: block;
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  margin: 20px 0;
+  padding: 12px;
+  font: inherit;
+  line-height: 1.7;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 5px;
 }
