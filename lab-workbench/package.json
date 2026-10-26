@@ -5,7 +5,9 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:browser": "playwright test --config test/playwright.config.mjs"
+    "test:browser": "playwright test --config test/playwright.config.mjs",
+    "inventory:validate": "node inventory/convert.mjs --validate",
+    "inventory:convert": "node inventory/convert.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

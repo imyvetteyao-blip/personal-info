@@ -42,6 +42,9 @@ export function blankCocktail() {
 }
 export const blankBuffer = () => ({
   name: "",
+  preparationLot: "",
+  preparationDate: "",
+  targetPH: "",
   volume: "",
   volumeUnit: "mL",
   components: [],
@@ -56,13 +59,17 @@ export const blankSIS = () => ({
   cocktails: [blankCocktail()],
   demo: false,
 });
-export function componentFromRow(row, mapping, source) {
+export function componentFromRow(row, mapping, source, version = null, updatedAt = null) {
   const pick = (key) => (mapping[key] ? String(row[mapping[key]] ?? "") : "");
   return {
     id: uid(),
     name: pick("name"),
     inventory: structuredClone(row),
     inventorySource: source,
+    inventoryVersion: version,
+    inventoryUpdatedAt: updatedAt,
+    stockTargetMass: "",
+    stockTargetMassUnit: "mg",
     inventoryMapping: structuredClone(mapping),
     observationMethod: "volume",
     stockObservationMethod: "mass",
@@ -159,7 +166,7 @@ export function validateRecord(r) {
       if (typeof value[key] !== typeof sample) throw new Error(`Invalid or missing input field: ${key}.`);
     }
   };
-  checkFields(r.inputs, r.kind === "buffer" ? blankBuffer() : blankSIS());
+  checkFields(r.inputs, r.kind === "buffer" ? blankBuffer() : blankSIS(), ["preparationLot", "preparationDate", "targetPH"]);
   if (!isObject(r.results)) throw new Error("Invalid saved results.");
   if (r.ruleVersion === RULE_VERSION && !Array.isArray(r.results[r.kind === "buffer" ? "rows" : "cocktails"]))
     throw new Error("Incomplete result snapshot.");
@@ -170,7 +177,8 @@ export function validateRecord(r) {
     if (!item || typeof item.id !== "string") throw new Error("Invalid record item.");
     if (r.kind === "buffer" && (!item.inventory || typeof item.inventory !== "object" || Array.isArray(item.inventory)))
       throw new Error("Missing inventory snapshot.");
-    if (r.kind === "buffer") checkFields(item, componentFromRow({}, {}, ""), ["observationMethod", "stockObservationMethod"]);
+    if (r.kind === "buffer")
+      checkFields(item, componentFromRow({}, {}, ""), ["observationMethod", "stockObservationMethod", "stockTargetMass", "stockTargetMassUnit"]);
     if (r.kind === "sis") {
       checkFields(item, blankCocktail());
       if (!item.stocks?.S || !item.stocks?.IS) throw new Error("Missing S / IS stock inputs.");

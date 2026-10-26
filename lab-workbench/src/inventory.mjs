@@ -53,15 +53,15 @@ export function tableFromRows(rows, headerRow = 1) {
       .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]))),
   };
 }
-export async function readInventoryFile(file, config = INVENTORY_CONFIG) {
+export async function readInventoryFile(file, config = INVENTORY_CONFIG, Excel = globalThis.ExcelJS) {
   if (file.size > 10e6) throw new Error("Inventory file exceeds 10 MB.");
   if (/\.(csv|tsv)$/i.test(file.name)) {
     const decoded = decodeCSV(await file.arrayBuffer(), config.csvLegacyEncoding);
     return [{ name: "CSV", rows: parseCSV(decoded.text), encoding: decoded.encoding }];
   }
   if (!/\.xlsx$/i.test(file.name)) throw new Error("Select a CSV, TSV, or XLSX file. Legacy XLS is not supported.");
-  if (!globalThis.ExcelJS) throw new Error("XLSX reader is unavailable. Reload the page or use CSV.");
-  const workbook = new globalThis.ExcelJS.Workbook();
+  if (!Excel) throw new Error("XLSX reader is unavailable. Reload the page or use CSV.");
+  const workbook = new Excel.Workbook();
   await workbook.xlsx.load(await file.arrayBuffer());
   return workbook.worksheets.map((sheet) => {
     if (sheet.rowCount > 50000 || sheet.columnCount > 500) throw new Error("Worksheet exceeds 50,000 rows or 500 columns.");
@@ -120,8 +120,8 @@ export function decodeCSV(buffer, legacyEncoding = INVENTORY_CONFIG.csvLegacyEnc
     }
   }
 }
-export async function importInventory(file, config = INVENTORY_CONFIG) {
-  const sheets = await readInventoryFile(file, config);
+export async function importInventory(file, config = INVENTORY_CONFIG, Excel = globalThis.ExcelJS) {
+  const sheets = await readInventoryFile(file, config, Excel);
   if (/\.(csv|tsv)$/i.test(file.name)) {
     const table = tableFromRows(sheets[0].rows, config.headerRow);
     return {

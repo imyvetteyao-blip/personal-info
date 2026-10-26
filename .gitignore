@@ -1,3 +1,7 @@
 lab-workbench/node_modules/
 lab-workbench/output/
 lab-workbench/test-results/
+# Confidential developer inventory and generated intermediate data never belong in this public repository.
+lab-workbench/inventory/source.*
+lab-workbench/inventory/local.settings.json
+lab-workbench/generated/

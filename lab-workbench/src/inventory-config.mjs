@@ -6,6 +6,13 @@ export const INVENTORY_CONFIG = {
   requiredFields: ["name", "cas", "barcode"],
   csvLegacyEncoding: "windows-1252", // Legacy English Excel "CSV (Comma delimited)".
   fields: {
+    location: { label: "Location", aliases: ["Location"] },
+    sublocation: { label: "Sub-location", aliases: ["Sub-location", "Sub Location", "Sublocation"] },
+    amount: { label: "Amount", aliases: ["Amount", "Quantity"] },
+    units: { label: "Units", aliases: ["Units", "Unit"] },
+    state: { label: "State", aliases: ["State", "Physical State"] },
+    grade: { label: "Grade", aliases: ["Grade"] },
+    temperature: { label: "Temperature", aliases: ["Temperature", "Storage Temperature"] },
     name: {
       label: "Chemical Name",
       aliases: ["Chemical Name", "Chemical", "Name", "Compound", "Reagent"],

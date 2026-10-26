@@ -1,4 +1,4 @@
-export const RULE_VERSION = "1.1.0";
+export const RULE_VERSION = "1.2.0";
 // Relative tolerance only for floating-point comparisons at decision boundaries; results stay unrounded.
 export const below = (a, b) => a < b && b - a > 16 * Number.EPSILON * Math.max(Math.abs(a), Math.abs(b), 1);
 export const above = (a, b) => below(b, a);
@@ -258,6 +258,9 @@ export function calculateBufferComponent(c, volume, unit) {
       forcedStock,
       method,
       targetMM,
+      stockTargetMassMg: null,
+      stockMassDeviationMg: null,
+      stockMassErrorPercent: null,
       stockMM: null,
       transferML: null,
       stockTransferUL: null,
@@ -346,6 +349,19 @@ export function calculateBufferComponent(c, volume, unit) {
             r.stockMassBasis = "Measured mass";
             if (c.form === "pure-liquid" && density) r.stockCalculatedVolumeUL = finite(r.stockActualMassMg / density);
           }
+          if (supplied(c.stockTargetMass)) {
+            try {
+              r.stockTargetMassMg = namedMass(c.stockTargetMass, c.stockTargetMassUnit || "mg", "Stock target mass");
+              const deviation = massError(r.stockActualMassMg, r.stockTargetMassMg);
+              r.stockMassDeviationMg = deviation.deviationMg;
+              r.stockMassErrorPercent = deviation.errorPercent;
+              formulas.push(
+                `Stock weighing error (%) = (${r.stockActualMassMg} - ${r.stockTargetMassMg}) / ${r.stockTargetMassMg} × 100 = ${r.stockMassErrorPercent}; this is not a buffer concentration error.`,
+              );
+            } catch (e) {
+              errors.push(e.message);
+            }
+          }
           r.stockFinalVolumeUL = namedVolume(c.stockVolume, c.stockVolumeUnit, "Stock final solution volume");
           r.stockMM = stockFromWeight(r.stockActualMassMg, mw, r.stockFinalVolumeUL);
           availableUL = r.stockFinalVolumeUL;
@@ -413,6 +429,8 @@ export function calculateBuffer(b) {
       ...calculateBufferComponent(c, b.volume, b.volumeUnit),
     }));
   if (!b.name?.trim()) errors.push("Preparation name is required.");
+  if (b.targetPH != null && String(b.targetPH).trim() !== "" && !Number.isFinite(Number(b.targetPH)))
+    errors.push("Target pH must be a finite number.");
   if (!rows.length) errors.push("Add at least one inventory component.");
   try {
     positive(b.volume, "Final buffer volume");

@@ -1,3 +1,4 @@
+import { writeBufferPreparation } from "./excel-buffer.mjs";
 import { RULE_VERSION, massMg, volumeUL, calculateSingle } from "./calculations.mjs";
 import { isMeaningful, supplierFields, componentMapping } from "./inventory-config.mjs";
 import { excelResultFormat } from "./format.mjs";
@@ -183,60 +184,7 @@ export async function createPreparationWorkbook(record, Excel = globalThis.Excel
   wb.modified = new Date();
   wb.description = `Preparation ${record.id}; rules ${record.ruleVersion}; ${exportStatus(record)}`;
   if (record.kind === "buffer") {
-    const rows = bufferRows(record),
-      columns = [
-        col("name", "Component Name", 42),
-        col("id", "Inventory ID", 22),
-        col("barcode", "Barcode", 22),
-        col("cas", "CAS", 18),
-        col("vendor", "Vendor / Company", 32),
-        col("vendorId", "Vendor ID", 24),
-        col("lot", "Lot", 22),
-        col("mw", "Molecular Weight (g/mol)", 20),
-        col("density", "Density (g/mL)", 18),
-        col("target", "Target Concentration", 22),
-        col("targetUnit", "Target Concentration Unit", 22),
-        col("targetMass", "Target Mass (mg)", 20, true),
-        col("targetLiquid", "Target Liquid Volume (µL)", 22, true),
-        col("observationMethod", "Observation Method", 22),
-        col("observedMass", "Observed Mass — Measured (mg)", 24),
-        col("observedVolume", "Observed Volume — Measured (µL)", 24),
-        col("calculatedMass", "Mass Calculated from Density (mg)", 25, true),
-        col("calculatedVolume", "Volume Calculated from Density (µL)", 26, true),
-        col("basisMass", "Mass Used for Concentration (mg)", 25, true),
-        col("observationBasis", "Actual Concentration Basis", 42),
-        col("massDeviation", "Mass Deviation (mg)", 21, true, true),
-        col("massError", "Mass Error (%)", 20, true, true),
-        col("massErrorBasis", "Mass Error Basis", 32),
-        col("stockMass", "Stock Actual Mass (mg)", 22, true),
-        col("stockMeasuredMass", "Stock Observed Mass — Measured (mg)", 26),
-        col("stockMeasuredVolume", "Stock Observed Pure-liquid Volume — Measured (µL)", 28),
-        col("stockMassBasis", "Stock Mass Basis", 36),
-        col("stockObservationMethod", "Stock Observation Method", 24),
-        col("stockCalculatedMass", "Stock Mass Calculated from Density (mg)", 27, true),
-        col("stockCalculatedVolume", "Stock Pure-liquid Volume Calculated from Density (µL)", 30, true),
-        col("stockVolume", "Stock Final Volume (µL)", 22),
-        col("stockMM", "Stock Concentration (mM)", 23, true),
-        col("transfer", "Stock Transfer Volume (µL)", 24, true),
-        col("actualMM", "Actual Final Concentration (mM)", 26, true),
-        col("review", "Review Status", 20),
-        col("method", "Preparation Method", 22),
-        col("form", "Physical Form", 20),
-        col("inventorySource", "Inventory Source", 30),
-      ];
-    const definedHeaders = new Set(record.inputs.components.flatMap((c) => Object.values(componentMapping(c))));
-    const extras = [...new Set(rows.flatMap((r) => Object.keys(r._inventory)))].filter(
-      (h) => !definedHeaders.has(h) && rows.some((r) => isMeaningful(r._inventory[h])),
-    );
-    extras.forEach((h, i) => {
-      const key = `inventory${i}`;
-      columns.push(col(key, `Inventory: ${h}`, 30));
-      rows.forEach((r) => {
-        const v = r._inventory[h];
-        r[key] = isMeaningful(v) ? (typeof v === "number" || typeof v === "boolean" ? v : String(v)) : null;
-      });
-    });
-    sheet(wb, "Preparation", record, columns, rows);
+    writeBufferPreparation(wb, record, exportStatus(record));
   } else {
     const rows = [];
     for (const c of record.inputs.cocktails) {
