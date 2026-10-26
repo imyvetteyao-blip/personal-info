@@ -1,4 +1,4 @@
-import { calculateSingle, volumeUL, concentrationMM, needsCocktailCoordination } from "./calculations.mjs";
+import { calculateSingle, calculateSIS, volumeUL, concentrationMM, needsCocktailCoordination } from "./calculations.mjs";
 
 const close = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 16 * Number.EPSILON * Math.max(Math.abs(a), Math.abs(b));
 export function editableStockNumber(stock, field) {
@@ -30,6 +30,15 @@ export function switchStockMode(stock, mode) {
   return next;
 }
 export function cocktailPresentationResults(inputs, results) {
+  // Archived records retain their original fields/snapshots. Re-evaluate their
+  // current view so removed availability inputs and cached errors cannot apply.
+  if (
+    inputs.cocktails.some((c) =>
+      ["S", "IS"].some((role) => Object.hasOwn(c.stocks[role], "available") || Object.hasOwn(c.stocks[role], "availableUnit")),
+    )
+  ) {
+    results = calculateSIS(inputs);
+  }
   const coordinationRequired = needsCocktailCoordination(inputs, results.plan);
   return {
     ...results,

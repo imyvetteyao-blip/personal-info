@@ -597,6 +597,64 @@ summary {
 .cocktail-settings .grid {
   margin: 12px 0;
 }
+.preparation-name {
+  max-width: 700px;
+}
+.single-stock-fields .single-stock-result {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  background: #edf8f6;
+  border-radius: 6px;
+  color: #285d60;
+}
+.single-stock-result output {
+  display: block;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 650;
+}
+.stock-result-unit {
+  font-size: 14px;
+  font-weight: 500;
+}
+.cocktail-fold .panel-heading h2 {
+  flex: 1;
+  min-width: 0;
+}
+.cocktail-fold .panel-heading > button {
+  flex-shrink: 0;
+}
+.cocktail-fold-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 12px 22px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cocktail-fold-summary > span {
+  min-width: 0;
+}
+.cocktail-fold-summary > .two-line {
+  flex: 1 1 180px;
+}
+.cocktail-fold-body[hidden] {
+  display: none;
+}
+.cocktail-role-calculation {
+  min-width: 0;
+}
+.cocktail-role-calculation h3 {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .cocktail-fold-summary {
+    margin: 12px;
+  }
+}
 .stock-card .field {
   font-size: 11px;
 }

@@ -107,6 +107,9 @@ for (const width of [320, 390, 768, 1024, 1280, 1440, 1920]) {
     await page.getByRole("link", { name: "Cocktail Making", exact: true }).click();
     await page.getByRole("button", { name: "Load A / B / C demo" }).click();
     await noHorizontalOverflow(page);
+    for (const toggle of await page.locator('[data-action="toggle-cocktail-calculation"],[data-action="toggle-transfer-worksheet"]').all())
+      await toggle.click();
+    await noHorizontalOverflow(page);
     await page.getByRole("link", { name: "Overview", exact: true }).click();
     await noHorizontalOverflow(page);
   });

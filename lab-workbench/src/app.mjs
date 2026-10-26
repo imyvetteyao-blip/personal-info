@@ -60,6 +60,8 @@ const units = {
 };
 let fieldScope = "";
 const expandedComponents = new Set();
+const expandedCocktailCalculations = new Set();
+const expandedTransferWorksheets = new Set();
 let inventoryRequest = 0;
 const editor = () => editors[route];
 function get(obj, path) {
@@ -416,10 +418,12 @@ function stockNumberField(stock, path, result, kind) {
       : "Required Stock Final Volume (µL)"
     : editable
       ? "Desired Stock Concentration (mM)"
-      : "Stock Concentration (mM)";
-  const number = volume ? result.prepUL : result.stockMM;
-  const value = editable ? editableStockNumber(stock, field) : Number.isFinite(number) ? formatResult(number) : "";
-  return `<label class="field single-stock-${kind}">${label}<input id="f-${path}.${field}" data-stock-field="${kind}" ${editable ? `data-path="${path}.${field}" inputmode="decimal"` : `readonly aria-readonly="true" ${Number.isFinite(number) ? `class="calculated-value" data-action="precision" data-value="${number}" title="Full precision: ${number}"` : 'placeholder="Calculated"'}`} value="${escape(value)}" autocomplete="off"></label>`;
+      : "Calculated Stock Concentration (mM)";
+  if (editable)
+    return `<label class="field single-stock-${kind}">${label}<input id="f-${path}.${field}" data-path="${path}.${field}" data-stock-field="${kind}" inputmode="decimal" value="${escape(editableStockNumber(stock, field))}" autocomplete="off"></label>`;
+  const number = volume ? result.prepUL : result.stockMM,
+    labelId = `label-${path}.${kind}`;
+  return `<div class="field single-stock-result single-stock-${kind}"><span id="${labelId}">${label}</span><output data-stock-field="${kind}" aria-labelledby="${labelId}" ${Number.isFinite(number) ? `data-value="${number}"` : ""}>${fmt(number)} <span class="stock-result-unit">${volume ? "µL" : "mM"}</span></output></div>`;
 }
 function stockCard(c, i, role) {
   const s = c.stocks[role],
@@ -443,7 +447,7 @@ function stockCard(c, i, role) {
   )}${amountFields}</div><div class="stock-mode">${select(`${p}.volumeMode`, "Stock Calculation Method", [
     ["manual", "Enter Stock Volume"],
     ["target", "Set Stock Concentration"],
-  ])}</div><div class="grid two single-stock-fields">${input(`${p}.solvent`, "Solvent")}${stockNumberField(s, p, r, "volume")}${stockNumberField(s, p, r, "concentration")}${quantity(`${p}.available`, "Available stock volume (optional)", `${p}.availableUnit`, units.volume, "Defaults to stock final volume")}</div><p class="help">Volume Basis: Final Solution Volume. ${s.volumeMode === "target" ? "Required volume is a plan. If the actual final volume differs, select Enter Stock Volume and enter the actual volume." : "Enter the actual final solution volume; stock concentration is calculated from the recorded amount."} Stock final volume must be &lt;3000 µL.</p>${s.volumeBasis === "solvent" ? '<p class="notice warning">Legacy record: the saved volume was Solvent Added. Saved calculations remain an approximation. Enter the actual final solution volume or set a desired stock concentration to confirm the final-volume workflow.</p>' : ""}<div class="cocktail-target">${quantity(`${p}.target`, "Target Concentration in Cocktail", `${p}.targetUnit`, units.molar)}<p class="help">This is the concentration in the final cocktail, separate from this stock concentration. Per-assay calculations retain the confirmed dilution rules.</p></div>${messages(r.errors)}${s.volumeBasis === "solvent" ? "" : messages(r.warnings, "warning")}${formula(r.formulas)}</div>`;
+  ])}</div><div class="grid two single-stock-fields">${input(`${p}.solvent`, "Solvent")}${stockNumberField(s, p, r, s.volumeMode === "target" ? "concentration" : "volume")}${stockNumberField(s, p, r, s.volumeMode === "target" ? "volume" : "concentration")}</div><p class="help">Volume Basis: Final Solution Volume. ${s.volumeMode === "target" ? "Required volume is a plan. If the actual final volume differs, select Enter Stock Volume and enter the actual volume." : "Enter the actual final solution volume; stock concentration is calculated from the recorded amount."} Stock final volume must be &lt;3000 µL.</p>${s.volumeBasis === "solvent" ? '<p class="notice warning">Legacy record: the saved volume was Solvent Added. Saved calculations remain an approximation. Enter the actual final solution volume or set a desired stock concentration to confirm the final-volume workflow.</p>' : ""}<div class="cocktail-target">${quantity(`${p}.target`, "Target Concentration in Cocktail", `${p}.targetUnit`, units.molar)}<p class="help">This is the concentration in the final cocktail, separate from this stock concentration. Per-assay calculations retain the confirmed dilution rules.</p></div>${messages(r.errors)}${s.volumeBasis === "solvent" ? "" : messages(r.warnings, "warning")}${formula(r.formulas)}</div>`;
 }
 function cocktailVolumeSettings() {
   const s = editor().inputs;
@@ -474,12 +478,43 @@ function volumePlan(r) {
       "",
     )}</tbody></table></div><div class="plan-confirm"><span class="help">Changing any preparation input invalidates this confirmation and the record review.</span>${button("confirm-plan", s.confirmed ? "Volume plan confirmed" : "Confirm volume plan", s.confirmed ? "" : "primary", r.plan?.length !== s.cocktails.length ? "disabled" : "")}</div></div></section>`;
 }
+function cocktailResultPanels(c, index, cr, allResults) {
+  const s = editor().inputs,
+    name = c.name || `Cocktail ${index + 1}`;
+  const extraIssues = [
+    ...(!c.name?.trim() ? ["Cocktail name is required."] : []),
+    ...(allResults.coordinationRequired && !s.confirmed ? ["Volume plan requires confirmation."] : []),
+  ];
+  const issues = [...new Set([...(cr.errors || []), ...(cr.warnings || []), ...extraIssues])];
+  const summary = `<p class="cocktail-fold-summary"><span>Final volume: ${fmt(cr.finalUL)} µL</span><span class="two-line" title="${escape(issues.join(" "))}">${issues.length ? `${issues.length} ${issues.length === 1 ? "item" : "items"} to review — ${escape(issues[0])}` : "No calculation issues"}</span></p>`;
+  const lines = (items) => `<div class="formulas">${(items || []).map((line) => `<p>${escape(line)}</p>`).join("")}</div>`;
+  const calculations = `<div class="panel-body"><div class="result-strip"><div><small>Final Cocktail Volume (µL)</small><strong>${fmt(cr.finalUL)}</strong></div><div><small>Cocktail Volume per Assay (µL)</small><strong>${fmt(cr.assayUL)}</strong></div></div>${messages(cr.errors)}${messages([...(cr.warnings || []), ...extraIssues], "warning")}<div class="grid two">${[
+    "S",
+    "IS",
+  ]
+    .map((role) => {
+      const row = cr.rows?.find((x) => x.role === role);
+      return `<section class="cocktail-role-calculation"><h3><span>${role}</span><button class="cell-peek" data-action="full-cell" data-value="${escape(c.stocks[role].name || "Stock")}" title="${escape(c.stocks[role].name || "Stock")}"><span class="two-line">${escape(c.stocks[role].name || "Stock")}</span></button></h3>${lines([...(row?.stock?.formulas || []), ...(row?.formulas || [])])}</section>`;
+    })
+    .join("")}</div>${lines(cr.formulas)}</div>`;
+  const worksheet = `${cocktailTable(c, cr)}<div class="panel-body">${messages(cr.errors)}${messages(extraIssues, "warning")}</div>`;
+  function fold(kind, title, content, expandedSet) {
+    const expanded = expandedSet.has(c.id),
+      bodyId = `${kind}-${encodeURIComponent(c.id)}`;
+    const action = kind === "cocktail-calculation" ? "toggle-cocktail-calculation" : "toggle-transfer-worksheet";
+    return `<section class="panel cocktail-fold ${kind}" data-cocktail-id="${escape(c.id)}"><div class="panel-heading"><h2><button class="cell-peek" data-action="full-cell" data-value="${escape(name)}" title="${escape(name)}"><span class="two-line">${escape(name)} · ${title}</span></button></h2>${button(action, expanded ? "Collapse" : "Details", "small", `data-id="${escape(c.id)}" aria-expanded="${expanded}" aria-controls="${bodyId}" aria-label="${expanded ? "Collapse" : "Expand"} ${escape(name)} ${title}"`)}</div>${summary}<div class="cocktail-fold-body" id="${bodyId}" ${expanded ? "" : "hidden"}>${content}</div></section>`;
+  }
+  return (
+    fold("cocktail-calculation", "Calculations", calculations, expandedCocktailCalculations) +
+    fold("transfer-worksheet", "Transfer Worksheet", worksheet, expandedTransferWorksheets)
+  );
+}
 function sis() {
   const s = editor().inputs,
     r = results();
   return (
     title() +
-    `<section class="panel"><div class="panel-heading"><h2>Preparation details</h2>${button("demo-sis", "Load A / B / C demo")}</div><div class="panel-body"><div class="grid two">${input("name", "Preparation Name", "e.g. Multiplex S/IS preparation")}<div class="notice" style="margin:0">No inventory confirmation is required for Cocktail Making. Each cocktail has separate S and IS stocks, targets, and final volume.</div></div>${cocktailVolumeSettings()}</div></section>` +
+    `<section class="panel"><div class="panel-heading"><h2>Preparation details</h2>${button("demo-sis", "Load A / B / C demo")}</div><div class="panel-body"><div class="preparation-name">${input("name", "Preparation Name", "e.g. Multiplex cocktail preparation")}</div>${cocktailVolumeSettings()}</div></section>` +
     s.cocktails
       .map(
         (c, i) =>
@@ -489,9 +524,9 @@ function sis() {
     `<div class="actions" style="margin-bottom:24px">${button("add-cocktail", "+ Add independent cocktail")}</div>` +
     volumePlan(r) +
     s.cocktails
-      .map((c) => {
+      .map((c, i) => {
         const cr = r.cocktails?.find((x) => x.id === c.id) || {};
-        return `<section class="panel"><div class="panel-heading"><h2>${escape(c.name) || "Cocktail"} · Transfer worksheet</h2>${badge(!r.coordinationRequired ? "Original volume retained" : s.confirmed ? "Confirmed plan" : "Plan preview", !r.coordinationRequired || s.confirmed ? "teal" : "amber")}</div><div class="panel-body"><div class="result-strip"><div><small>Final Cocktail Volume (µL)</small><strong>${fmt(cr.finalUL)}</strong></div><div><small>Cocktail Volume per Assay (µL)</small><strong>${fmt(cr.assayUL)}</strong></div></div></div>${cocktailTable(c, cr)}<div class="panel-body">${messages(cr.errors)}${formula([...(cr.formulas || []), ...(cr.rows || []).flatMap((row) => row.formulas || [])])}</div></section>`;
+        return cocktailResultPanels(c, i, cr, r);
       })
       .join("") +
     review(r)
@@ -500,7 +535,7 @@ function sis() {
 function review(r) {
   const e = editor(),
     ready = !r.errors.length && (route !== "buffer" || e.inputs.components.every((c) => c.reviewed));
-  return `<section class="panel"><div class="panel-heading"><h2>Calculation review &amp; record</h2>${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}</div><div class="panel-body">${messages(r.errors)}${route === "buffer" && e.inputs.components.some((c) => !c.reviewed) ? '<p class="help">Check Calculation Review for each component after verifying the inputs.</p>' : ""}<p class="help">Drafts may contain incomplete inputs. Reviewed records require valid calculations${route === "sis" ? (r.coordinationRequired ? ", sufficient stocks, and a confirmed volume plan" : ", sufficient stocks, and valid final volumes") : ", actual preparation inputs, and checked components"}. Saving and imports use only this browser. Rules ${RULE_VERSION}.</p><div class="actions">${button("review", "Mark Reviewed", "", !ready ? "disabled" : "")}${button("save", "Save Preparation Record", "primary")}${button("export-excel", "Export Preparation Excel")}</div></div></section>`;
+  return `<section class="panel"><div class="panel-heading"><h2>Calculation review &amp; record</h2>${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}</div><div class="panel-body">${messages(r.errors)}${route === "buffer" && e.inputs.components.some((c) => !c.reviewed) ? '<p class="help">Check Calculation Review for each component after verifying the inputs.</p>' : ""}<p class="help">Drafts may contain incomplete inputs. Reviewed records require valid calculations${route === "sis" ? (r.coordinationRequired ? ", valid stock final volumes, and a confirmed volume plan" : ", valid stocks and final volumes") : ", actual preparation inputs, and checked components"}. Saving and imports use only this browser. Rules ${RULE_VERSION}.</p><div class="actions">${button("review", "Mark Reviewed", "", !ready ? "disabled" : "")}${button("save", "Save Preparation Record", "primary")}${button("export-excel", "Export Preparation Excel")}</div></div></section>`;
 }
 function recordsPage() {
   return `<div class="title-row"><div><div class="eyebrow">YOUR LOCAL NOTEBOOK</div><h1>Preparation Records</h1><p class="subtitle">Reopen, edit, or duplicate a preparation. Export an Excel preparation workbook.</p></div><label class="button primary">Import JSON<input type="file" accept=".json,application/json" id="record-file" hidden></label></div><div class="notice">Records and imported data are saved only in this browser. No backend or company system is connected. Imported records open as Draft and retain their original result snapshot.</div><section class="panel"><div class="panel-heading"><h2>Saved preparations</h2>${badge(`${records.length} records`)}</div>${records.length ? `<div class="table-wrap"><table class="inventory-table"><thead><tr><th>Preparation</th><th>Module</th><th>Status</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>${records.map((r) => `<tr><td><strong>${escape(r.name)}</strong><br>${r.demo ? badge("Demo data", "amber") : ""}</td><td>${r.kind === "buffer" ? "Buffer Making" : "Cocktail Making"}</td><td>${badge(r.status, r.status === "Reviewed" ? "teal" : "amber")}</td><td>${escape(r.updatedAt?.replace("T", " ").slice(0, 16))} UTC<br><span class="help">Rules ${escape(r.ruleVersion)}</span></td><td><div class="actions">${button("open-record", "Open", "small", `data-id="${escape(r.id)}"`)}${button("copy-record", "Copy as new", "small", `data-id="${escape(r.id)}"`)}${button("export-record", "Excel", "small", `data-id="${escape(r.id)}"`)}${button("delete-record", "Delete", "small danger", `data-id="${escape(r.id)}"`)}</div></td></tr>`).join("")}</tbody></table></div>` : '<div class="panel-body"><div class="empty">No saved records yet. Start a preparation and select Save Preparation Record.</div></div>'}</section>`;
@@ -568,6 +603,10 @@ function navigate(r) {
   if (route === r) render();
 }
 function openRecord(r) {
+  if (r.kind === "sis") {
+    expandedCocktailCalculations.clear();
+    expandedTransferWorksheets.clear();
+  }
   editors[r.kind] = {
     inputs: structuredClone(r.inputs),
     id: r.id,
@@ -694,6 +733,12 @@ app.addEventListener("click", async (event) => {
       expandedComponents.has(b.dataset.id) ? expandedComponents.delete(b.dataset.id) : expandedComponents.add(b.dataset.id);
       render();
       if (expandedComponents.has(b.dataset.id)) document.querySelector("#component-table-scroll").scrollLeft = 0;
+      return;
+    }
+    if (action === "toggle-cocktail-calculation" || action === "toggle-transfer-worksheet") {
+      const expanded = action === "toggle-cocktail-calculation" ? expandedCocktailCalculations : expandedTransferWorksheets;
+      expanded.has(b.dataset.id) ? expanded.delete(b.dataset.id) : expanded.add(b.dataset.id);
+      render();
       return;
     }
     if (action === "vendor-detail") {

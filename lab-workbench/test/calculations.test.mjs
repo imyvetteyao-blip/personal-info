@@ -197,10 +197,10 @@ test("single-standard manual volume, target volume and solvent approximation are
   near(b.stockMM, 10);
   assert.ok(calculateSingle(stock({ volumeBasis: "solvent" })).warnings.some((e) => e.includes("approximation")));
 });
-test("single-standard strict <3000 µL and availability constraints", () => {
+test("single-standard strict <3000 µL ignores retired availability inputs", () => {
   assert.equal(calculateSingle(stock({ prepVolume: "2999" })).errors.length, 0);
   assert.ok(calculateSingle(stock({ prepVolume: "3000" })).errors.some((e) => e.includes("<3000")));
-  assert.ok(calculateSingle(stock({ available: "2001" })).errors.some((e) => e.includes("exceed prepared")));
+  assert.deepEqual(calculateSingle(stock({ available: "invalid", availableUnit: "invalid" })).errors, []);
 });
 test("qNMR concentration requires its sample volume even if preparation volume is given", () => {
   const r = calculateSingle(
@@ -296,7 +296,7 @@ test("missing MW still permits qNMR volume calculation but never invents zero ma
   assert.equal(r.rows[0].massUG, null);
   near(r.rows[0].transferUL, 12);
 });
-test("negative solvent, insufficient stock, and missing targets block review", () => {
+test("negative solvent and missing targets block review while retired availability is ignored", () => {
   const c = blankCocktail();
   c.assayVolume = "30";
   c.stocks.S = stock({ target: "4000", available: "100" });
@@ -304,7 +304,7 @@ test("negative solvent, insufficient stock, and missing targets block review", (
   const r = calculateCocktail(c, 600);
   assert.ok(r.solventUL < 0);
   assert.ok(r.errors.some((e) => e.includes("negative")));
-  assert.ok(r.errors.some((e) => e.includes("available")));
+  assert.ok(!r.errors.some((e) => e.includes("available")));
   c.stocks.S.target = "";
   assert.ok(calculateCocktail(c, 600).errors.some((e) => e.includes("required")));
 });

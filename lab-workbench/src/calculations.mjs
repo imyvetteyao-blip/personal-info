@@ -81,8 +81,6 @@ export function calculateSingle(s) {
     const errors = [],
       warnings = [];
     if (prepUL >= 3000) errors.push("Single-standard preparation volume must be <3000 µL.");
-    const availableUL = s.available === "" || s.available == null ? prepUL : volumeUL(s.available, s.availableUnit);
-    if (above(availableUL, prepUL)) errors.push("Available stock volume cannot exceed prepared volume.");
     if (s.volumeBasis === "solvent")
       warnings.push("Volume approximation: concentration uses solvent added as an approximation of final solution volume.");
     if (!s.name?.trim()) errors.push("Compound name is required.");
@@ -99,13 +97,13 @@ export function calculateSingle(s) {
       amountUmol: amount,
       prepUL,
       stockMM,
-      availableUL,
       errors,
       warnings,
       formulas: [
         formula,
-        `Stock concentration (mM) = ${amount} µmol / ${prepUL} µL × 1000 = ${stockMM}`,
-        ...(s.volumeMode === "target" ? [`Preparation volume (µL) = ${amount} µmol × 1000 / ${stockMM} mM = ${prepUL}`] : []),
+        s.volumeMode === "target"
+          ? `Required stock final volume (µL): V = n / C × 1000 = ${amount} µmol / ${stockMM} mM × 1000 = ${prepUL}`
+          : `Calculated stock concentration (mM): C = n / V × 1000 = ${amount} µmol / ${prepUL} µL × 1000 = ${stockMM}`,
       ],
     };
   });
@@ -178,7 +176,7 @@ export function calculateCocktail(c, selectedVolume) {
       const transferUL = aliquot(targetUM, stock.stockMM, finalUL),
         perAssayUL = aliquot(targetUM, stock.stockMM, assayUL);
       const massUG = s.mw === "" || s.mw == null ? null : assayMass(targetUM, assayUL, s.mw);
-      if (above(transferUL, stock.availableUL)) errors.push(`${role}: required stock volume exceeds available volume (${stock.availableUL} µL).`);
+      if (above(transferUL, stock.prepUL)) errors.push(`${role}: required stock transfer exceeds Stock Final Volume (${stock.prepUL} µL).`);
       rows.push({
         role,
         name: s.name,

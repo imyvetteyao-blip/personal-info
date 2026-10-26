@@ -39,23 +39,23 @@ test("Cocktail Making replaces visible module names while old links and sis reco
   expect(stored).toEqual(record);
   expect(stored.kind).toBe("sis");
 });
-test("S and IS independently use one shared volume/concentration pair with adjacent Solvent", async ({ page }) => {
+test("S and IS independently show an editable input followed by a calculated output", async ({ page }) => {
   await savedCocktail(page);
   const s = card(page, "S"),
     is = card(page, "IS");
   await expect(s.locator('[data-stock-field="volume"]')).toHaveCount(1);
   await expect(s.locator('[data-stock-field="concentration"]')).toHaveCount(1);
   await expect(control(page, "S", "volume")).toBeEditable();
-  await expect(control(page, "S", "concentration")).not.toBeEditable();
+  await expect(control(page, "S", "concentration")).toHaveJSProperty("tagName", "OUTPUT");
   await field(page, path("IS", "volumeMode")).selectOption("target");
-  await expect(control(page, "IS", "volume")).not.toBeEditable();
+  await expect(control(page, "IS", "volume")).toHaveJSProperty("tagName", "OUTPUT");
   await expect(control(page, "IS", "concentration")).toBeEditable();
   await expect(control(page, "S", "volume")).toBeEditable();
   await expect(is.getByLabel("Desired Stock Concentration (mM)", { exact: true })).toHaveValue("1");
-  await expect(is.getByLabel("Required Stock Final Volume (µL)", { exact: true })).toHaveValue("2000.00");
+  await expect(control(page, "IS", "volume")).toHaveText("2000.00 µL");
   expect(await is.locator(".single-stock-fields > label").evaluateAll((nodes) => nodes.slice(0, 2).map((e) => e.textContent.trim()))).toEqual([
     "Solvent",
-    "Required Stock Final Volume (µL)",
+    "Desired Stock Concentration (mM)",
   ]);
   await expect(page.locator('[data-path$=".volumeBasis"],[data-path$=".prepUnit"],[data-path$=".desiredUnit"]')).toHaveCount(0);
   await expect(page.locator(".stock-card .result-strip")).toHaveCount(0);
@@ -119,13 +119,13 @@ test("desired concentration and an actual final-volume change update transfer, s
   await savedCocktail(page);
   await field(page, path("IS", "volumeMode")).selectOption("target");
   await control(page, "IS", "concentration").fill("2");
-  await expect(control(page, "IS", "volume")).toHaveValue("1000.00");
+  await expect(control(page, "IS", "volume")).toHaveText("1000.00 µL");
   let rows = page.locator(".results-table tbody tr");
   await expect(rows.nth(1).locator("td").last()).toHaveText("35.00");
   await expect(page.locator(".solvent > strong")).toHaveText("505.00");
   await field(page, path("IS", "volumeMode")).selectOption("manual");
   await control(page, "IS", "volume").fill("1500");
-  await expect(control(page, "IS", "concentration")).toHaveValue("1.33");
+  await expect(control(page, "IS", "concentration")).toHaveText("1.33 mM");
   await expect(rows.nth(1).locator("td").last()).toHaveText("52.50");
   await expect(rows.nth(1).locator("td").nth(4)).toHaveText("2.63");
   await expect(page.locator(".solvent > strong")).toHaveText("487.50");
@@ -152,7 +152,7 @@ test("volume limits and the existing IS scaling rule work in concentration mode 
   await expect(card(page, "IS")).toContainText("<3000 µL");
   await expect(page.getByRole("button", { name: "Mark Reviewed" })).toBeDisabled();
   await control(page, "IS", "concentration").fill("10");
-  await expect(control(page, "IS", "volume")).toHaveValue("200.00");
+  await expect(control(page, "IS", "volume")).toHaveText("200.00 µL");
   await expect(page.locator(".plan-table")).toBeVisible();
   await expect(page.locator(".plan-table tbody tr td").nth(5)).toHaveText("20.00");
   await page.getByRole("button", { name: "Confirm volume plan", exact: true }).click();

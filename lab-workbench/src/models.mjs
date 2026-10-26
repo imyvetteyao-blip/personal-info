@@ -24,8 +24,6 @@ export function blankStock(role) {
     volumeBasis: "final",
     desiredConcentration: "",
     desiredUnit: "mmol/L",
-    available: "",
-    availableUnit: "µL",
     target: "",
     targetUnit: "µmol/L",
   };
