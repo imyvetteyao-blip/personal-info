@@ -582,6 +582,21 @@ summary {
 .stock-card .grid {
   gap: 13px;
 }
+.stock-mode,
+.single-stock-fields {
+  margin-top: 14px;
+}
+.cocktail-target {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.cocktail-target .field {
+  max-width: 360px;
+}
+.cocktail-settings .grid {
+  margin: 12px 0;
+}
 .stock-card .field {
   font-size: 11px;
 }

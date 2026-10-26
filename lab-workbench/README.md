@@ -1,6 +1,6 @@
 # Lab Preparation Workbench
 
-Buffer Making and S/IS Making on the existing GitHub Pages site. Preparation records stay in the current browser. The built-in inventory is maintained by developers and currently contains **Demo data only**. Existing repository reports are not part of the Pages site.
+Buffer Making and Cocktail Making on the existing GitHub Pages site. Preparation records stay in the current browser. The built-in inventory is maintained by developers and currently contains **Demo data only**. Existing repository reports are not part of the Pages site.
 
 ## Development and deployment
 
@@ -41,7 +41,15 @@ Direct weighing Error is `(observed mass − target mass) / target mass × 100%`
 
 Preparation dates display a civil-calendar day number (Jan 1 = Day 1), independent of time zones/DST. Saved record calendar metadata and Excel retain the selected date, year and Day of Year; empty dates have no invented day number. S/IS stock preparation dates follow the same rule.
 
-S/IS unit conversions, independent stock details, minimum IS and scale-up coordination remain unchanged. Results display two decimals without rounding stored inputs/results; small nonzero values show `<0.01` with full precision available. Records retain selected inventory snapshots/versions. Legacy saved calculations remain intact until explicit recalculation; new rule version is 1.2.0.
+Cocktail Making keeps the legacy `#sis` link and `sis` record kind, and also accepts `#cocktail`. Navigation, titles and record lists use the new display name. Saved records and their original calculation snapshots remain intact until explicit edits.
+
+Each S and IS stock independently selects **Enter Stock Volume** or **Set Stock Concentration**. One volume/concentration pair switches editable/read-only states; no duplicate result cards are created. Solvent sits next to Stock Final Volume. Volumes use µL, stock concentrations use mM, and Volume Basis is fixed to Final Solution Volume. Legacy units are converted for display; legacy solvent-added records retain an explicit approximation warning until the final-volume workflow is confirmed by editing the final volume or setting a concentration.
+
+With amount n in µmol, C (mM) = n / V (µL) × 1000 and V = n / C × 1000. Mass input supplies n = mass (mg) / MW × 1000. qNMR amount and legacy qNMR concentration/sample-volume sources use the same amount-based engine. Only the selected direction is evaluated. A deliberate mode switch uses raw model calculations and retains equivalent original inputs within floating-point precision, avoiding drift from repeatedly inverting rounded display values. Editable values are not rounded; read-only results show two decimals with full precision available. Concentration-mode volumes are explicitly planned values in the UI and Excel volume basis. Entering an actual final volume recalculates stock concentration, transfer, solvent and per-assay results.
+
+The <3000 µL stock limit, ≥20 µL minimum IS aliquot and existing multi-cocktail coordination/threshold rules remain enforced. When all original IS aliquots already satisfy the minimum and explicit Match Batch Volumes is off, the coordination panel and redundant confirmation are omitted. Minimum/threshold and explicit matching controls remain under **Cocktail volume settings**. Adjustments and explicit matching still require plan confirmation. Results, saved records, reopened records and Excel share the same calculations.
+
+Results display two decimals without rounding stored inputs/results; small nonzero values show `<0.01` with full precision available. Records retain selected inventory snapshots/versions. Existing saved calculations remain intact until explicit recalculation; the scientific rule version remains 1.2.0.
 
 ## Sectioned Buffer Excel
 
@@ -51,6 +59,6 @@ One Preparation worksheet contains:
 - **B. Components:** nine columns, one component per row; consolidated supplier/ID/Lot/Barcode, explicit target units, applicable observations and signed Error. No unrelated inventory columns.
 - **C. Stock Solutions:** only stocks; each stock's actual mass, individual final volume, amount (mmol), actual concentration and transfer. Existing-stock unknown mass/amount/final volume remain blank.
 
-Notes explain density-derived observations and stock error scope. Numeric calculations stay numeric, with two-decimal display. Tables have borders, restrained fills, wrapping and filters; printing is one page wide with unlimited height and normal 11-point body text. No blank Instruments or procedure sections are added. Excel export and Save Preparation Record remain separate. Legacy JSON import is retained for old records; Excel is not a record-import format. S/IS retains its separate cocktail/batch exports because its per-assay semantics differ from a buffer recipe.
+Notes explain density-derived observations and stock error scope. Numeric calculations stay numeric, with two-decimal display. Tables have borders, restrained fills, wrapping and filters; printing is one page wide with unlimited height and normal 11-point body text. No blank Instruments or procedure sections are added. Excel export and Save Preparation Record remain separate. Legacy JSON import is retained for old records; Excel is not a record-import format. Cocktail Making retains its separate cocktail/batch exports because its per-assay semantics differ from a buffer recipe.
 
 ExcelJS 4.4.0 is MIT licensed; the license is included in `docs/EXCELJS-LICENSE.txt`.

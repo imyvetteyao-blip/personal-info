@@ -74,11 +74,10 @@ export function calculateSingle(s) {
       amount = amountFromQNMR(s.qConcentration, s.qUnit, sampleUL);
       formula = `Amount (µmol) = ${concentrationMM(s.qConcentration, s.qUnit)} mM × ${sampleUL} µL / 1000 = ${amount}`;
     } else throw new Error("Select a supported stock data source.");
-    const prepUL =
-      s.volumeMode === "target"
-        ? finite((amount * 1000) / concentrationMM(s.desiredConcentration, s.desiredUnit))
-        : volumeUL(s.prepVolume, s.prepUnit);
-    const stockMM = stockFromAmount(amount, prepUL);
+    // Only the selected direction supplies an input; never feed a rounded result back.
+    const desiredMM = s.volumeMode === "target" ? concentrationMM(s.desiredConcentration, s.desiredUnit) : null;
+    const prepUL = s.volumeMode === "target" ? finite((amount * 1000) / desiredMM) : volumeUL(s.prepVolume, s.prepUnit);
+    const stockMM = s.volumeMode === "target" ? desiredMM : stockFromAmount(amount, prepUL);
     const errors = [],
       warnings = [];
     if (prepUL >= 3000) errors.push("Single-standard preparation volume must be <3000 µL.");
@@ -441,6 +440,12 @@ function validPositiveOrNull(value) {
     return null;
   }
 }
+export function needsCocktailCoordination(s, plan) {
+  if (!Array.isArray(plan) || !plan.length || plan.length !== s.cocktails.length) return true;
+  const minimum = Number(s.minimum);
+  if (!Number.isFinite(minimum) || minimum < 20) return true;
+  return !!s.match || plan.some((row) => !Number.isFinite(row?.originalIS) || below(row.originalIS, minimum));
+}
 export function calculateSIS(s) {
   const errors = [],
     warnings = [];
@@ -471,10 +476,12 @@ export function calculateSIS(s) {
   });
   if (plan.length && new Set(plan.map((p) => p.selectedVolume)).size > 1)
     warnings.push("Different final volumes: follow the selected final volume for each cocktail.");
-  if (!s.confirmed) errors.push("Confirm the volume plan before generating a reviewed operation sheet.");
+  const coordinationRequired = needsCocktailCoordination(s, plan);
+  if (coordinationRequired && !s.confirmed) errors.push("Confirm the volume plan before generating a reviewed operation sheet.");
   return {
     cocktails,
     plan,
+    coordinationRequired,
     errors,
     warnings,
     rules: {

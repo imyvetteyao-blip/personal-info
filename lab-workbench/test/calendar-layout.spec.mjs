@@ -104,7 +104,7 @@ for (const width of [320, 390, 768, 1024, 1280, 1440, 1920]) {
     await page.getByRole("button", { name: "Save Preparation Record" }).first().click();
     await page.getByRole("link", { name: "Records", exact: true }).click();
     await noHorizontalOverflow(page);
-    await page.getByRole("link", { name: "S/IS Making", exact: true }).click();
+    await page.getByRole("link", { name: "Cocktail Making", exact: true }).click();
     await page.getByRole("button", { name: "Load A / B / C demo" }).click();
     await noHorizontalOverflow(page);
     await page.getByRole("link", { name: "Overview", exact: true }).click();

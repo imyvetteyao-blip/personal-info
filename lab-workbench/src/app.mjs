@@ -23,13 +23,15 @@ import { formatResult } from "./format.mjs";
 import { createPreparationWorkbook } from "./excel.mjs";
 import { calendarDateInfo } from "./calendar-date.mjs";
 import { bufferPresentationResults } from "./buffer-view.mjs";
+import { editableStockNumber, switchStockMode, cocktailPresentationResults } from "./cocktail-controls.mjs";
 
 const app = document.querySelector("#app");
 const editors = {
   buffer: { inputs: blankBuffer(), status: "Draft", dirty: false },
   sis: { inputs: blankSIS(), status: "Draft", dirty: false },
 };
-let route = location.hash.slice(1) || "home",
+const routeForHash = (hash) => (hash === "cocktail" ? "sis" : ["home", "buffer", "sis", "records"].includes(hash) ? hash : "home");
+let route = routeForHash(location.hash.slice(1)),
   records = [],
   inventory = null,
   query = "",
@@ -105,7 +107,7 @@ const badge = (text, cls = "") => `<span class="badge ${cls}">${escape(text)}</s
 function results() {
   const e = editor();
   const r = e.snapshot && !e.dirty ? e.snapshot.results : evaluate(route, e.inputs);
-  return route === "buffer" ? bufferPresentationResults(r) : r;
+  return route === "buffer" ? bufferPresentationResults(r) : route === "sis" ? cocktailPresentationResults(e.inputs, r) : r;
 }
 function invalidate() {
   const e = editor();
@@ -128,6 +130,16 @@ function normalizePreparationMethods() {
     if (r.method) c.method = r.method;
   }
 }
+function updateInput(path, value) {
+  set(editor().inputs, path, value);
+  if (route !== "sis") return;
+  const match = /^(cocktails\.\d+\.stocks\.(?:S|IS))\.(prepVolume|desiredConcentration)$/.exec(path);
+  if (!match) return;
+  const stock = get(editor().inputs, match[1]);
+  if (match[2] === "prepVolume") stock.prepUnit = "µL";
+  else stock.desiredUnit = "mmol/L";
+  stock.volumeBasis = "final";
+}
 function toast(text) {
   const el = document.querySelector("#toast");
   el.textContent = text;
@@ -139,18 +151,21 @@ function header() {
   return `<header class="header"><a href="#home" class="brand"><span class="logo"><svg viewBox="0 0 24 26" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 2h8M10 2v8L4 21a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-11V2M7 17h10"/><circle cx="11" cy="20" r=".8"/></svg></span><span>Lab Preparation Workbench<small>PRECISION IN EVERY PREPARATION</small></span></a><nav class="nav" aria-label="Main navigation">${[
     ["home", "Overview"],
     ["buffer", "Buffer Making"],
-    ["sis", "S/IS Making"],
+    ["sis", "Cocktail Making"],
     ["records", "Records"],
   ]
-    .map(([r, l]) => `<a href="#${r}" class="${route === r ? "active" : ""}" ${route === r ? 'aria-current="page"' : ""}>${l}</a>`)
+    .map(
+      ([r, l]) =>
+        `<a href="#${r === "sis" ? "cocktail" : r}" class="${route === r ? "active" : ""}" ${route === r ? 'aria-current="page"' : ""}>${l}</a>`,
+    )
     .join("")}</nav><span class="local"><span class="dot"></span>Browser local workspace</span></header>`;
 }
 function home() {
-  return `<div class="home-hero"><div class="eyebrow">YOUR LAB, ORGANIZED</div><h1>Prepare with confidence.<br>Keep every calculation clear.</h1><p>A practical workspace for buffer recipes, single standards, and S/IS cocktails. From your first input to a reviewed preparation record.</p></div><div class="module-grid"><a class="module" href="#buffer"><div class="module-icon">Bf</div><h2>Buffer Making</h2><p>Build a complete buffer recipe from your local inventory file or the published Demo inventory. Calculate quantities and record actual preparation.</p><span class="module-link">Start a buffer preparation &nbsp; →</span></a><a class="module" href="#sis"><div class="module-icon">S/IS</div><h2>S/IS Making</h2><p>Prepare single standards, coordinate cocktail volumes, and review every stock transfer.</p><span class="module-link">Open the S/IS workbench &nbsp; →</span></a><div class="module"><div class="module-icon">···</div><h2>Other Preparation</h2><p>More preparation workflows will be available here.</p><span>${badge("Coming soon")}</span></div></div><div class="notice">Preparation records stay in this browser. Local inventory files are processed in your browser. Published Demo data is maintained by the developer. No company system or backend is connected. Export preparation Excel files for documentation; browser data can be cleared.</div><div class="stats"><div><h3>01 &nbsp; Define your preparation</h3><p>Use explicit units, inventory snapshots, and stock details.</p></div><div><h3>02 &nbsp; Check the calculation</h3><p>Inspect formulas, volume plans, and validation before review.</p></div><div><h3>03 &nbsp; Keep a useful record</h3><p>Save locally, reopen, export a preparation Excel workbook.</p></div></div>`;
+  return `<div class="home-hero"><div class="eyebrow">YOUR LAB, ORGANIZED</div><h1>Prepare with confidence.<br>Keep every calculation clear.</h1><p>A practical workspace for buffer recipes, single standards, and cocktails. From your first input to a reviewed preparation record.</p></div><div class="module-grid"><a class="module" href="#buffer"><div class="module-icon">Bf</div><h2>Buffer Making</h2><p>Build a complete buffer recipe from your local inventory file or the published Demo inventory. Calculate quantities and record actual preparation.</p><span class="module-link">Start a buffer preparation &nbsp; →</span></a><a class="module" href="#cocktail"><div class="module-icon">Mix</div><h2>Cocktail Making</h2><p>Prepare single standards, coordinate cocktail volumes, and review every stock transfer.</p><span class="module-link">Open the cocktail workbench &nbsp; →</span></a><div class="module"><div class="module-icon">···</div><h2>Other Preparation</h2><p>More preparation workflows will be available here.</p><span>${badge("Coming soon")}</span></div></div><div class="notice">Preparation records stay in this browser. Local inventory files are processed in your browser. Published Demo data is maintained by the developer. No company system or backend is connected. Export preparation Excel files for documentation; browser data can be cleared.</div><div class="stats"><div><h3>01 &nbsp; Define your preparation</h3><p>Use explicit units, inventory snapshots, and stock details.</p></div><div><h3>02 &nbsp; Check the calculation</h3><p>Inspect formulas, volume plans, and validation before review.</p></div><div><h3>03 &nbsp; Keep a useful record</h3><p>Save locally, reopen, export a preparation Excel workbook.</p></div></div>`;
 }
 function title() {
   const e = editor();
-  return `<div class="title-row"><div><div class="eyebrow">PREPARATION WORKSPACE</div><h1>${route === "buffer" ? "Buffer Making" : "S/IS Making"}</h1><p class="subtitle">${route === "buffer" ? "One recipe. One final volume. Every component accounted for." : "Single standards and coordinated cocktails, with a traceable calculation for every transfer."}</p></div><div class="actions">${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}${e.dirty ? badge("Unsaved changes") : ""}${button("new", "New preparation")}${button("save", "Save Preparation Record", "primary")}</div></div>${e.inputs.demo ? '<div class="notice warning"><strong>Demo data</strong> — Example values for testing only. This preparation remains marked as demo in saved records and Excel workbooks.</div>' : ""}${e.snapshot ? `<div class="notice saved-banner"><strong>Saved record reopened.</strong> Saved results and rule version ${escape(e.snapshot.ruleVersion)} are preserved. Editing an input recalculates results and requires a new review.${e.snapshot.imported ? " Imported records require local review." : ""}<details><summary>View saved snapshot</summary><pre>${escape(JSON.stringify(e.snapshot, null, 2))}</pre></details></div>` : ""}`;
+  return `<div class="title-row"><div><div class="eyebrow">PREPARATION WORKSPACE</div><h1>${route === "buffer" ? "Buffer Making" : "Cocktail Making"}</h1><p class="subtitle">${route === "buffer" ? "One recipe. One final volume. Every component accounted for." : "Single standards and coordinated cocktails, with a traceable calculation for every transfer."}</p></div><div class="actions">${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}${e.dirty ? badge("Unsaved changes") : ""}${button("new", "New preparation")}${button("save", "Save Preparation Record", "primary")}</div></div>${e.inputs.demo ? '<div class="notice warning"><strong>Demo data</strong> — Example values for testing only. This preparation remains marked as demo in saved records and Excel workbooks.</div>' : ""}${e.snapshot ? `<div class="notice saved-banner"><strong>Saved record reopened.</strong> Saved results and rule version ${escape(e.snapshot.ruleVersion)} are preserved. Editing an input recalculates results and requires a new review.${e.snapshot.imported ? " Imported records require local review." : ""}<details><summary>View saved snapshot</summary><pre>${escape(JSON.stringify(e.snapshot, null, 2))}</pre></details></div>` : ""}`;
 }
 function inventorySourceControls() {
   return `<div class="inventory-source-controls"><label class="field">Choose Local Inventory (CSV / XLSX)<input class="file-input" id="local-inventory-file" type="file" accept=".csv,.tsv,.xlsx"></label>${inventory?.sourceType === "local" ? button("reload-inventory", "Use Published Demo Inventory") : ""}</div><p class="help">Local files are read only in this browser, not uploaded to a server or GitHub. The full inventory stays in memory; select it again after a refresh. Saved component snapshots remain in this browser.</p>`;
@@ -391,11 +406,33 @@ function buffer() {
     review(r)
   );
 }
+function stockNumberField(stock, path, result, kind) {
+  const volume = kind === "volume",
+    editable = volume ? stock.volumeMode === "manual" : stock.volumeMode === "target";
+  const field = volume ? "prepVolume" : "desiredConcentration";
+  const label = volume
+    ? editable
+      ? "Stock Final Volume (µL)"
+      : "Required Stock Final Volume (µL)"
+    : editable
+      ? "Desired Stock Concentration (mM)"
+      : "Stock Concentration (mM)";
+  const number = volume ? result.prepUL : result.stockMM;
+  const value = editable ? editableStockNumber(stock, field) : Number.isFinite(number) ? formatResult(number) : "";
+  return `<label class="field single-stock-${kind}">${label}<input id="f-${path}.${field}" data-stock-field="${kind}" ${editable ? `data-path="${path}.${field}" inputmode="decimal"` : `readonly aria-readonly="true" ${Number.isFinite(number) ? `class="calculated-value" data-action="precision" data-value="${number}" title="Full precision: ${number}"` : 'placeholder="Calculated"'}`} value="${escape(value)}" autocomplete="off"></label>`;
+}
 function stockCard(c, i, role) {
   const s = c.stocks[role],
     p = `cocktails.${i}.stocks.${role}`,
     r = calculateSingle(s);
-  return `<div class="stock-card"><h3>${role === "S" ? "S · Substrate standard" : "IS · Internal standard"}${badge("Independent stock")}</h3><div class="grid two">${input(`${p}.name`, "Compound", "Exact compound name")}${input(`${p}.mw`, "Molecular Weight (g/mol)", "Optional for qNMR")}${input(`${p}.lot`, "Lot")}${input(`${p}.date`, "Preparation date", "", "date")}${input(`${p}.solvent`, "Solvent")}${select(
+  const amountFields =
+    s.source === "weight"
+      ? quantity(`${p}.mass`, "Actual compound mass", `${p}.massUnit`, units.mass)
+      : s.source === "qnmr-amount"
+        ? quantity(`${p}.amount`, "qNMR amount (not concentration)", `${p}.amountUnit`, ["µmol", "nmol"])
+        : quantity(`${p}.qConcentration`, "qNMR concentration", `${p}.qUnit`, units.molar) +
+          quantity(`${p}.sampleVolume`, "qNMR corresponding sample volume", `${p}.sampleUnit`, units.volume);
+  return `<div class="stock-card" data-stock-role="${role}" data-cocktail-index="${i}"><h3>${role === "S" ? "S · Substrate standard" : "IS · Internal standard"}${badge("Independent stock")}</h3><div class="grid two">${input(`${p}.name`, "Compound", "Exact compound name")}${input(`${p}.mw`, "Molecular Weight (g/mol)", "Optional for qNMR")}${input(`${p}.lot`, "Lot")}${input(`${p}.date`, "Preparation date", "", "date")}${select(
     `${p}.source`,
     "Stock data source",
     [
@@ -403,21 +440,14 @@ function stockCard(c, i, role) {
       ["qnmr-amount", "qNMR — amount (µmol / nmol)"],
       ["qnmr-concentration", "qNMR — concentration + sample volume"],
     ],
-  )}${s.source === "weight" ? quantity(`${p}.mass`, "Actual compound mass", `${p}.massUnit`, units.mass) : s.source === "qnmr-amount" ? quantity(`${p}.amount`, "qNMR amount (not concentration)", `${p}.amountUnit`, ["µmol", "nmol"]) : quantity(`${p}.qConcentration`, "qNMR concentration", `${p}.qUnit`, units.molar) + quantity(`${p}.sampleVolume`, "qNMR corresponding sample volume", `${p}.sampleUnit`, units.volume)}${select(
-    `${p}.volumeMode`,
-    "Preparation calculation",
-    [
-      ["manual", "Enter volume → calculate concentration"],
-      ["target", "Enter target concentration → calculate volume"],
-    ],
-  )}${s.volumeMode === "manual" ? quantity(`${p}.prepVolume`, s.volumeBasis === "solvent" ? "Solvent Added (approximation)" : "Final Solution Volume", `${p}.prepUnit`, units.volume) : quantity(`${p}.desiredConcentration`, "Target single-standard concentration", `${p}.desiredUnit`, units.molar)}${select(
-    `${p}.volumeBasis`,
-    "Volume basis",
-    [
-      ["final", "Final Solution Volume"],
-      ["solvent", "Solvent Added (volume approximation)"],
-    ],
-  )}${quantity(`${p}.available`, "Available stock volume (optional)", `${p}.availableUnit`, units.volume, "Defaults to prepared volume")}${quantity(`${p}.target`, "Target Concentration in Cocktail", `${p}.targetUnit`, units.molar)}</div><p class="help">Use the volume on the vial when available. Preparation volume must be &lt;3000 µL. Target refers to the final cocktail, before any further assay dilution. No purity correction is applied.</p><div class="result-strip"><div><small>Stock Concentration (mM)</small><strong>${fmt(r.stockMM)}</strong></div><div><small>Preparation volume (µL)</small><strong>${fmt(r.prepUL)}</strong></div></div>${messages(r.errors)}${messages(r.warnings, "warning")}${formula(r.formulas)}</div>`;
+  )}${amountFields}</div><div class="stock-mode">${select(`${p}.volumeMode`, "Stock Calculation Method", [
+    ["manual", "Enter Stock Volume"],
+    ["target", "Set Stock Concentration"],
+  ])}</div><div class="grid two single-stock-fields">${input(`${p}.solvent`, "Solvent")}${stockNumberField(s, p, r, "volume")}${stockNumberField(s, p, r, "concentration")}${quantity(`${p}.available`, "Available stock volume (optional)", `${p}.availableUnit`, units.volume, "Defaults to stock final volume")}</div><p class="help">Volume Basis: Final Solution Volume. ${s.volumeMode === "target" ? "Required volume is a plan. If the actual final volume differs, select Enter Stock Volume and enter the actual volume." : "Enter the actual final solution volume; stock concentration is calculated from the recorded amount."} Stock final volume must be &lt;3000 µL.</p>${s.volumeBasis === "solvent" ? '<p class="notice warning">Legacy record: the saved volume was Solvent Added. Saved calculations remain an approximation. Enter the actual final solution volume or set a desired stock concentration to confirm the final-volume workflow.</p>' : ""}<div class="cocktail-target">${quantity(`${p}.target`, "Target Concentration in Cocktail", `${p}.targetUnit`, units.molar)}<p class="help">This is the concentration in the final cocktail, separate from this stock concentration. Per-assay calculations retain the confirmed dilution rules.</p></div>${messages(r.errors)}${s.volumeBasis === "solvent" ? "" : messages(r.warnings, "warning")}${formula(r.formulas)}</div>`;
+}
+function cocktailVolumeSettings() {
+  const s = editor().inputs;
+  return `<details id="cocktail-volume-settings" class="cocktail-settings"><summary>Cocktail volume settings</summary><div class="grid two">${input("minimum", "Minimum IS Aliquot (µL)", "20")}${input("threshold", "IS Scale-Up Threshold (µL)", "100")}</div><p class="help">The scale-up threshold controls whether a batch follows the common volume. It is not a hard limit on IS usage.</p><div class="actions">${button("match", "Match Batch Volumes", s.match ? "primary" : "")}${s.match ? button("reset-match", "Use automatic plan") : ""}</div></details>`;
 }
 function cocktailTable(c, r) {
   return `<div class="table-wrap"><table class="results-table"><thead><tr><th>Compound</th><th>Stock Concentration<br>(mM)</th><th>Target Concentration in Cocktail<br>(µM)</th><th>Compound Mass per Assay<br>(µg)</th><th>Stock Volume per Assay<br>(µL)</th><th>Stock Volume to Transfer<br>(µL)</th></tr></thead><tbody>${[
@@ -433,9 +463,9 @@ function cocktailTable(c, r) {
     )}</tbody></table></div><div class="solvent"><div><strong style="font-size:13px">Solvent Volume to Add (µL)</strong><br><span class="help">Bring to the final cocktail volume after adding all stocks.</span></div><strong>${fmt(r.solventUL)}</strong></div>`;
 }
 function volumePlan(r) {
-  const s = editor().inputs,
-    matching = s.match;
-  return `<section class="panel"><div class="panel-heading"><h2><span class="number">02</span>Batch volume coordination</h2>${s.confirmed ? badge("Plan confirmed", "teal") : badge("Confirmation required", "amber")}</div><div class="panel-body"><div class="grid three">${input("minimum", "Minimum IS Aliquot (µL)", "20")}${input("threshold", "IS Scale-Up Threshold (µL)", "100")}<div><p class="help">The scale-up threshold controls whether a batch follows the common volume. It is not a hard limit on IS usage.</p></div></div><div class="actions" style="margin:18px 0">${button("match", "Match Batch Volumes", matching ? "primary" : "")}${matching ? button("reset-match", "Use automatic plan") : ""}</div><p class="help">A preview is recalculated from original volumes. Different original volumes are retained unless Match Batch Volumes is selected. Every S, IS, and solvent calculation uses the selected final volume for its cocktail.</p>${messages(r.warnings, "warning")}<div class="table-wrap"><table class="plan-table"><thead><tr><th>Cocktail</th><th>Original Volume<br>(µL)</th><th>Proposed Volume<br>(µL)</th><th>Selected Final Volume<br>(µL)</th><th>Original IS Aliquot<br>(µL)</th><th>Final IS Aliquot<br>(µL)</th><th>Adjustment reason</th></tr></thead><tbody>${s.cocktails
+  const s = editor().inputs;
+  if (!r.coordinationRequired) return "";
+  return `<section class="panel"><div class="panel-heading"><h2><span class="number">02</span>Batch volume coordination</h2>${s.confirmed ? badge("Plan confirmed", "teal") : badge("Confirmation required", "amber")}</div><div class="panel-body"><p class="help">A preview is recalculated from original volumes. Different original volumes are retained unless Match Batch Volumes is selected. Every S, IS, and solvent calculation uses the selected final volume for its cocktail.</p>${messages(r.warnings, "warning")}<div class="table-wrap"><table class="plan-table"><thead><tr><th>Cocktail</th><th>Original Volume<br>(µL)</th><th>Proposed Volume<br>(µL)</th><th>Selected Final Volume<br>(µL)</th><th>Original IS Aliquot<br>(µL)</th><th>Final IS Aliquot<br>(µL)</th><th>Adjustment reason</th></tr></thead><tbody>${s.cocktails
     .map((c) => {
       const p = r.plan?.find((p) => p.id === c.id);
       return `<tr class="${p && p.selectedVolume !== p.originalVolume ? "adjusted" : ""}"><td><strong>${escape(c.name) || "Unnamed cocktail"}</strong></td><td>${fmt(p?.originalVolume)}</td><td>${fmt(p?.proposedVolume)}</td><td class="final">${fmt(p?.selectedVolume)}</td><td>${fmt(p?.originalIS)}</td><td>${fmt(p?.finalIS)}</td><td>${escape(p?.reason || "Complete valid IS concentration and original volume inputs to calculate a plan.")}</td></tr>`;
@@ -449,7 +479,7 @@ function sis() {
     r = results();
   return (
     title() +
-    `<section class="panel"><div class="panel-heading"><h2>Preparation details</h2>${button("demo-sis", "Load A / B / C demo")}</div><div class="panel-body"><div class="grid two">${input("name", "Preparation Name", "e.g. Multiplex S/IS preparation")}<div class="notice" style="margin:0">No inventory confirmation is required for S/IS. Each cocktail has separate S and IS stocks, targets, and final volume.</div></div></div></section>` +
+    `<section class="panel"><div class="panel-heading"><h2>Preparation details</h2>${button("demo-sis", "Load A / B / C demo")}</div><div class="panel-body"><div class="grid two">${input("name", "Preparation Name", "e.g. Multiplex S/IS preparation")}<div class="notice" style="margin:0">No inventory confirmation is required for Cocktail Making. Each cocktail has separate S and IS stocks, targets, and final volume.</div></div>${cocktailVolumeSettings()}</div></section>` +
     s.cocktails
       .map(
         (c, i) =>
@@ -461,7 +491,7 @@ function sis() {
     s.cocktails
       .map((c) => {
         const cr = r.cocktails?.find((x) => x.id === c.id) || {};
-        return `<section class="panel"><div class="panel-heading"><h2>${escape(c.name) || "Cocktail"} · Transfer worksheet</h2>${badge(s.confirmed ? "Confirmed plan" : "Plan preview", s.confirmed ? "teal" : "amber")}</div><div class="panel-body"><div class="result-strip"><div><small>Final Cocktail Volume (µL)</small><strong>${fmt(cr.finalUL)}</strong></div><div><small>Cocktail Volume per Assay (µL)</small><strong>${fmt(cr.assayUL)}</strong></div></div></div>${cocktailTable(c, cr)}<div class="panel-body">${messages(cr.errors)}${formula([...(cr.formulas || []), ...(cr.rows || []).flatMap((row) => row.formulas || [])])}</div></section>`;
+        return `<section class="panel"><div class="panel-heading"><h2>${escape(c.name) || "Cocktail"} · Transfer worksheet</h2>${badge(!r.coordinationRequired ? "Original volume retained" : s.confirmed ? "Confirmed plan" : "Plan preview", !r.coordinationRequired || s.confirmed ? "teal" : "amber")}</div><div class="panel-body"><div class="result-strip"><div><small>Final Cocktail Volume (µL)</small><strong>${fmt(cr.finalUL)}</strong></div><div><small>Cocktail Volume per Assay (µL)</small><strong>${fmt(cr.assayUL)}</strong></div></div></div>${cocktailTable(c, cr)}<div class="panel-body">${messages(cr.errors)}${formula([...(cr.formulas || []), ...(cr.rows || []).flatMap((row) => row.formulas || [])])}</div></section>`;
       })
       .join("") +
     review(r)
@@ -470,12 +500,13 @@ function sis() {
 function review(r) {
   const e = editor(),
     ready = !r.errors.length && (route !== "buffer" || e.inputs.components.every((c) => c.reviewed));
-  return `<section class="panel"><div class="panel-heading"><h2>Calculation review &amp; record</h2>${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}</div><div class="panel-body">${messages(r.errors)}${route === "buffer" && e.inputs.components.some((c) => !c.reviewed) ? '<p class="help">Check Calculation Review for each component after verifying the inputs.</p>' : ""}<p class="help">Drafts may contain incomplete inputs. Reviewed records require valid calculations${route === "sis" ? ", sufficient stocks, and a confirmed volume plan" : ", actual preparation inputs, and checked components"}. Saving and imports use only this browser. Rules ${RULE_VERSION}.</p><div class="actions">${button("review", "Mark Reviewed", "", !ready ? "disabled" : "")}${button("save", "Save Preparation Record", "primary")}${button("export-excel", "Export Preparation Excel")}</div></div></section>`;
+  return `<section class="panel"><div class="panel-heading"><h2>Calculation review &amp; record</h2>${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}</div><div class="panel-body">${messages(r.errors)}${route === "buffer" && e.inputs.components.some((c) => !c.reviewed) ? '<p class="help">Check Calculation Review for each component after verifying the inputs.</p>' : ""}<p class="help">Drafts may contain incomplete inputs. Reviewed records require valid calculations${route === "sis" ? (r.coordinationRequired ? ", sufficient stocks, and a confirmed volume plan" : ", sufficient stocks, and valid final volumes") : ", actual preparation inputs, and checked components"}. Saving and imports use only this browser. Rules ${RULE_VERSION}.</p><div class="actions">${button("review", "Mark Reviewed", "", !ready ? "disabled" : "")}${button("save", "Save Preparation Record", "primary")}${button("export-excel", "Export Preparation Excel")}</div></div></section>`;
 }
 function recordsPage() {
-  return `<div class="title-row"><div><div class="eyebrow">YOUR LOCAL NOTEBOOK</div><h1>Preparation Records</h1><p class="subtitle">Reopen, edit, or duplicate a preparation. Export an Excel preparation workbook.</p></div><label class="button primary">Import JSON<input type="file" accept=".json,application/json" id="record-file" hidden></label></div><div class="notice">Records and imported data are saved only in this browser. No backend or company system is connected. Imported records open as Draft and retain their original result snapshot.</div><section class="panel"><div class="panel-heading"><h2>Saved preparations</h2>${badge(`${records.length} records`)}</div>${records.length ? `<div class="table-wrap"><table class="inventory-table"><thead><tr><th>Preparation</th><th>Module</th><th>Status</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>${records.map((r) => `<tr><td><strong>${escape(r.name)}</strong><br>${r.demo ? badge("Demo data", "amber") : ""}</td><td>${r.kind === "buffer" ? "Buffer Making" : "S/IS Making"}</td><td>${badge(r.status, r.status === "Reviewed" ? "teal" : "amber")}</td><td>${escape(r.updatedAt?.replace("T", " ").slice(0, 16))} UTC<br><span class="help">Rules ${escape(r.ruleVersion)}</span></td><td><div class="actions">${button("open-record", "Open", "small", `data-id="${escape(r.id)}"`)}${button("copy-record", "Copy as new", "small", `data-id="${escape(r.id)}"`)}${button("export-record", "Excel", "small", `data-id="${escape(r.id)}"`)}${button("delete-record", "Delete", "small danger", `data-id="${escape(r.id)}"`)}</div></td></tr>`).join("")}</tbody></table></div>` : '<div class="panel-body"><div class="empty">No saved records yet. Start a preparation and select Save Preparation Record.</div></div>'}</section>`;
+  return `<div class="title-row"><div><div class="eyebrow">YOUR LOCAL NOTEBOOK</div><h1>Preparation Records</h1><p class="subtitle">Reopen, edit, or duplicate a preparation. Export an Excel preparation workbook.</p></div><label class="button primary">Import JSON<input type="file" accept=".json,application/json" id="record-file" hidden></label></div><div class="notice">Records and imported data are saved only in this browser. No backend or company system is connected. Imported records open as Draft and retain their original result snapshot.</div><section class="panel"><div class="panel-heading"><h2>Saved preparations</h2>${badge(`${records.length} records`)}</div>${records.length ? `<div class="table-wrap"><table class="inventory-table"><thead><tr><th>Preparation</th><th>Module</th><th>Status</th><th>Last saved</th><th>Actions</th></tr></thead><tbody>${records.map((r) => `<tr><td><strong>${escape(r.name)}</strong><br>${r.demo ? badge("Demo data", "amber") : ""}</td><td>${r.kind === "buffer" ? "Buffer Making" : "Cocktail Making"}</td><td>${badge(r.status, r.status === "Reviewed" ? "teal" : "amber")}</td><td>${escape(r.updatedAt?.replace("T", " ").slice(0, 16))} UTC<br><span class="help">Rules ${escape(r.ruleVersion)}</span></td><td><div class="actions">${button("open-record", "Open", "small", `data-id="${escape(r.id)}"`)}${button("copy-record", "Copy as new", "small", `data-id="${escape(r.id)}"`)}${button("export-record", "Excel", "small", `data-id="${escape(r.id)}"`)}${button("delete-record", "Delete", "small danger", `data-id="${escape(r.id)}"`)}</div></td></tr>`).join("")}</tbody></table></div>` : '<div class="panel-body"><div class="empty">No saved records yet. Start a preparation and select Save Preparation Record.</div></div>'}</section>`;
 }
 function render() {
+  const volumeSettingsOpen = document.querySelector("#cocktail-volume-settings")?.open;
   const scrolls = [...document.querySelectorAll("[data-preserve-scroll]")].map((n) => ({ id: n.id, left: n.scrollLeft, top: n.scrollTop }));
   const active = document.activeElement,
     focus = active?.id,
@@ -485,7 +516,8 @@ function render() {
     stale = opened && opened.ruleVersion !== RULE_VERSION;
   app.innerHTML =
     header() +
-    `<main class="shell" id="main"><div class="breadcrumb"><a href="#home">Workbench</a> &nbsp;/&nbsp; ${escape({ home: "Overview", buffer: "Buffer Making", sis: "S/IS Making", records: "Records" }[route] || "Overview")}</div><div class="workspace">${storageError ? messages([storageError]) : ""}${notice ? `<div class="notice">${escape(notice)}</div>` : ""}${stale ? `<h1>${escape(opened.name)}</h1><div class="notice warning">This record uses rules ${escape(opened.ruleVersion)}. Saved results are preserved as a read-only snapshot. Recalculate explicitly to edit under current rules ${RULE_VERSION}.</div>${button("recalculate", "Recalculate with current rules", "primary")}${button("export-excel", "Export Preparation Excel")}<pre>${escape(JSON.stringify(opened, null, 2))}</pre>` : route === "home" ? home() : route === "buffer" ? buffer() : route === "sis" ? sis() : recordsPage()}</div><footer class="footer"><span>Lab Preparation Workbench · Browser local storage · Export preparation Excel files</span><span>Explicit units. Traceable calculations. &nbsp; Rules ${RULE_VERSION}</span></footer><dialog id="detail-dialog"><h2 id="detail-title"></h2><textarea id="detail-content" readonly aria-label="Full content"></textarea><div class="actions">${button("copy-detail", "Copy full content")}${button("close-detail", "Close")}</div></dialog></main>`;
+    `<main class="shell" id="main"><div class="breadcrumb"><a href="#home">Workbench</a> &nbsp;/&nbsp; ${escape({ home: "Overview", buffer: "Buffer Making", sis: "Cocktail Making", records: "Records" }[route] || "Overview")}</div><div class="workspace">${storageError ? messages([storageError]) : ""}${notice ? `<div class="notice">${escape(notice)}</div>` : ""}${stale ? `<h1>${escape(opened.name)}</h1><div class="notice warning">This record uses rules ${escape(opened.ruleVersion)}. Saved results are preserved as a read-only snapshot. Recalculate explicitly to edit under current rules ${RULE_VERSION}.</div>${button("recalculate", "Recalculate with current rules", "primary")}${button("export-excel", "Export Preparation Excel")}<pre>${escape(JSON.stringify(opened, null, 2))}</pre>` : route === "home" ? home() : route === "buffer" ? buffer() : route === "sis" ? sis() : recordsPage()}</div><footer class="footer"><span>Lab Preparation Workbench · Browser local storage · Export preparation Excel files</span><span>Explicit units. Traceable calculations. &nbsp; Rules ${RULE_VERSION}</span></footer><dialog id="detail-dialog"><h2 id="detail-title"></h2><textarea id="detail-content" readonly aria-label="Full content"></textarea><div class="actions">${button("copy-detail", "Copy full content")}${button("close-detail", "Close")}</div></dialog></main>`;
+  if (volumeSettingsOpen && document.querySelector("#cocktail-volume-settings")) document.querySelector("#cocktail-volume-settings").open = true;
   for (const table of app.querySelectorAll("table")) {
     const labels = [...table.querySelectorAll("thead th")].map((th) => th.textContent.trim());
     for (const row of table.querySelectorAll("tbody tr:not(.component-details)")) {
@@ -554,7 +586,7 @@ async function download(r) {
     }),
     a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${r.demo ? "demo-" : ""}${r.kind}-${r.id}.xlsx`;
+  a.download = `${r.demo ? "demo-" : ""}${r.kind === "sis" ? "cocktail" : r.kind}-${r.id}.xlsx`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -583,10 +615,10 @@ app.addEventListener("input", (event) => {
     render();
     return;
   }
-  if (!target.dataset.path || target.tagName === "SELECT" || target.type === "checkbox") return;
+  if (!target.dataset.path || target.readOnly || target.tagName === "SELECT" || target.type === "checkbox") return;
   try {
     invalidate();
-    set(editor().inputs, target.dataset.path, target.value);
+    updateInput(target.dataset.path, target.value);
     normalizePreparationMethods();
     render();
   } catch (e) {
@@ -613,7 +645,12 @@ app.addEventListener("change", async (event) => {
       render();
       toast("Record imported as Draft. Saved results preserved; review before use.");
     } else if (t.dataset.path && (t.tagName === "SELECT" || t.type === "checkbox")) {
-      if (t.dataset.path.endsWith(".reviewed")) {
+      const stockModePath = route === "sis" && /^(cocktails\.\d+\.stocks\.(?:S|IS))\.volumeMode$/.exec(t.dataset.path);
+      if (stockModePath) {
+        const stock = switchStockMode(get(editor().inputs, stockModePath[1]), t.value);
+        invalidate();
+        set(editor().inputs, stockModePath[1], stock);
+      } else if (t.dataset.path.endsWith(".reviewed")) {
         set(editor().inputs, t.dataset.path, t.checked);
         editor().dirty = true;
         editor().snapshot = null;
@@ -730,7 +767,7 @@ app.addEventListener("click", async (event) => {
       invalidate();
       e.inputs.cocktails.splice(Number(b.dataset.index), 1);
     } else if (action === "demo-sis") {
-      if (e.dirty && !confirm("Replace unsaved S/IS inputs with clearly marked Demo data?")) return;
+      if (e.dirty && !confirm("Replace unsaved cocktail inputs with clearly marked Demo data?")) return;
       editors.sis = { inputs: demoSIS(), status: "Draft", dirty: true };
     } else if (action === "match" || action === "reset-match") {
       invalidate();
@@ -802,7 +839,7 @@ app.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("hashchange", () => {
-  route = ["home", "buffer", "sis", "records"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "home";
+  route = routeForHash(location.hash.slice(1));
   notice = "";
   render();
   window.scrollTo(0, 0);

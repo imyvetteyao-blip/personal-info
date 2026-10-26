@@ -1,6 +1,7 @@
 import { writeBufferPreparation } from "./excel-buffer.mjs";
 import { calendarDateInfo } from "./calendar-date.mjs";
 import { bufferPresentationResults } from "./buffer-view.mjs";
+import { cocktailPresentationResults } from "./cocktail-controls.mjs";
 import { RULE_VERSION, massMg, volumeUL, calculateSingle } from "./calculations.mjs";
 import { isMeaningful, supplierFields, componentMapping } from "./inventory-config.mjs";
 import { excelResultFormat } from "./format.mjs";
@@ -27,7 +28,7 @@ export function exportStatus(record) {
   return record.status === "Reviewed" &&
     !record.results.errors?.length &&
     (record.kind !== "buffer" || record.inputs.components.every((c) => c.reviewed)) &&
-    (record.kind !== "sis" || record.inputs.confirmed)
+    (record.kind !== "sis" || !cocktailPresentationResults(record.inputs, record.results).coordinationRequired || record.inputs.confirmed)
     ? "Reviewed"
     : "Draft";
 }
@@ -180,6 +181,7 @@ export function bufferRows(record) {
 }
 export async function createPreparationWorkbook(record, Excel = globalThis.ExcelJS) {
   if (record.kind === "buffer") record = { ...record, results: bufferPresentationResults(record.results) };
+  else record = { ...record, results: cocktailPresentationResults(record.inputs, record.results) };
   if (!Excel?.Workbook) throw new Error("Excel export is unavailable. Reload the workbench.");
   const wb = new Excel.Workbook();
   wb.creator = "Lab Preparation Workbench";
@@ -213,7 +215,12 @@ export async function createPreparationWorkbook(record, Excel = globalThis.Excel
           qUnit: s.source === "qnmr-concentration" ? s.qUnit : null,
           sampleVolume: s.source === "qnmr-concentration" ? convert(s.sampleVolume, s.sampleUnit, volumeUL) : null,
           prepVolume: stock.prepUL ?? null,
-          volumeBasis: s.volumeBasis === "solvent" ? "Solvent Added — volume approximation" : "Final Solution Volume",
+          volumeBasis:
+            s.volumeBasis === "solvent"
+              ? "Solvent Added — volume approximation"
+              : s.volumeMode === "target"
+                ? "Final Solution Volume — planned"
+                : "Final Solution Volume",
           stockMM: stock.stockMM ?? null,
           target: r.targetUM ?? null,
           massUG: r.massUG ?? null,
@@ -247,7 +254,7 @@ export async function createPreparationWorkbook(record, Excel = globalThis.Excel
         col("qConcentration", "qNMR Concentration", 22),
         col("qUnit", "qNMR Concentration Unit", 22),
         col("sampleVolume", "qNMR Sample Volume (µL)", 24),
-        col("prepVolume", "Stock Preparation Volume (µL)", 24, true),
+        col("prepVolume", "Stock Final Volume (µL)", 24, true),
         col("volumeBasis", "Stock Volume Basis", 36),
         col("stockMM", "Stock Concentration (mM)", 24, true),
         col("target", "Target Concentration in Cocktail (µM)", 28, true),
