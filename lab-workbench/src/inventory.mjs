@@ -172,17 +172,21 @@ export async function importInventory(file, config = INVENTORY_CONFIG, Excel = g
     throw new Error(failures.length ? failures.join(" ") : `Required worksheet not found: ${config.worksheetName || "inventory template"}.`);
   return candidates[0];
 }
+// Search-only normalization; inventory values and component snapshots stay intact.
+// Clipboard text from spreadsheets/PDFs can contain hidden characters and line breaks.
+export function cleanInventorySearchText(value, { trim = true } = {}) {
+  const text = String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g, "")
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/\s+/g, " ");
+  return trim ? text.trim() : text;
+}
 export function matchingRows(rows, mapping, query) {
-  const q = query.toLocaleLowerCase().trim();
+  const q = cleanInventorySearchText(query).toLowerCase();
   if (!q) return [];
   return rows.filter((r) =>
-    ["name", "cas", "barcode", "id"].some(
-      (k) =>
-        mapping[k] &&
-        String(r[mapping[k]] ?? "")
-          .toLocaleLowerCase()
-          .includes(q),
-    ),
+    ["name", "cas", "barcode", "id"].some((k) => mapping[k] && cleanInventorySearchText(r[mapping[k]]).toLowerCase().includes(q)),
   );
 }
 

@@ -37,6 +37,7 @@ const record = (c, status = "Draft") =>
       ...blankBuffer(),
       name: "Buffer example",
       volume: "1000",
+      volumeUnit: "mL",
       components: [c],
     },
     status,

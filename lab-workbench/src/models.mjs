@@ -46,7 +46,7 @@ export const blankBuffer = () => ({
   preparationDate: "",
   targetPH: "",
   volume: "",
-  volumeUnit: "mL",
+  volumeUnit: "µL",
   components: [],
   demo: false,
 });

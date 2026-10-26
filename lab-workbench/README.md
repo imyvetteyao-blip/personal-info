@@ -29,9 +29,13 @@ Each buffer component is one comparison row. Chemical Name stays in the first co
 
 The search table shows Chemical Name, Location (with Sub-location), Amount (with Units), Company, Barcode, CAS, ID, Lot Number, State, Grade and Temperature. It omits SOP/PHS Label columns, clamps display to two lines and keeps identifiers on one line. Full values can be opened/copied. Summary fields are hidden by name: Received Date, MyChem, yearly Inventory dates, TRGS, General Storage, Inventory Source. Raw snapshots remain intact, including valid 0/false values.
 
+Typed and pasted searches share search-only normalization for Unicode compatibility, whitespace, invisible clipboard formatting and equivalent hyphens. Paste is handled before a single-line input can join words across copied line breaks; insertion/replacement keeps the selection and surrounding text. Original names, identifiers and snapshots are never normalized or rewritten.
+
 ## Calculations and records
 
 The final buffer volume includes every stock/liquid addition. Stock remains required below 100 mg; exactly 100 mg allows direct preparation. Pure-liquid observations use the explicitly selected mass/volume basis. Solution mass is never treated as solute mass. Stock concentration and transfer use the observed mass and each stock's own final volume.
+
+Target Mass is calculated automatically in mg as soon as MW, Target Concentration and Target Volume are supplied, before observations or stock preparation inputs. New preparations default to µL for Target Volume; mL and L remain available and saved record units stay unchanged. Units are converted for the calculation and no numeric volume is assumed. A missing target prerequisite has a direct link from its Target Mass cell, and invalid inputs show a specific explanation. This buffer target is distinct from the optional, explicitly supplied Stock Target Mass.
 
 Direct weighing Error is `(observed mass − target mass) / target mass × 100%`; volume-based pure liquids use density-derived mass with an explicit label. Stock weighing Error is separate and is calculated **only** when Stock Target Mass is explicitly supplied. It is never presented as a final-buffer concentration error. Existing stocks have no fabricated weighing observation or error. There are no acceptance thresholds.
 

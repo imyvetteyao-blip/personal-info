@@ -326,6 +326,7 @@ test("save/reopen JSON preserves full precision, inputs, rule snapshot and inven
     ...blankBuffer(),
     name: "Snapshot",
     volume: "1000",
+    volumeUnit: "mL",
     components: [
       component({
         inventory: {

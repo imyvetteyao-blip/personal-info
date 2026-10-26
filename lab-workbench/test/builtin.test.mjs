@@ -45,6 +45,7 @@ const record = (cs) =>
     preparationDate: "2026-01-02",
     targetPH: "7.4",
     volume: "1000",
+    volumeUnit: "mL",
     components: cs,
   });
 

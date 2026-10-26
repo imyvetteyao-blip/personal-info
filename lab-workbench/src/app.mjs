@@ -14,7 +14,7 @@ import {
   decodeRecord,
   copyRecord,
 } from "./models.mjs";
-import { matchingRows } from "./inventory.mjs";
+import { matchingRows, cleanInventorySearchText } from "./inventory.mjs";
 import { isMeaningful } from "./inventory-config.mjs";
 import { INVENTORY_COLUMNS, inventoryValue, summaryEntries, vendorDescription } from "./inventory-view.mjs";
 import { loadBuiltinInventory } from "./builtin-inventory.mjs";
@@ -325,13 +325,34 @@ function observationInput(c, i, r) {
 }
 function componentTable(b, results) {
   if (!b.components.length) return '<div class="empty">No components yet. Search the current inventory and select Add Component.</div>';
-  return `<section class="panel"><div class="panel-heading"><h2>Components</h2><span class="help">One component per row. Expand Details for stock preparation, snapshots, formulas and review.</span></div><div class="component-grid-scroll" id="component-table-scroll" data-preserve-scroll><table class="component-grid"><colgroup>${[225, 190, 95, 185, 120, 150, 215, 120, 175, 100].map((w) => `<col style="width:${w}px">`).join("")}</colgroup><thead><tr>${["Chemical Name", "Vendor", "MW (g/mol)", "Target Concentration", "Target Mass (mg)", "Target Liquid Volume (µL)", "Observation", "Error (%)", "Preparation Method", "Review"].map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>${b.components
+  return `<section class="panel"><div class="panel-heading"><h2>Components</h2><span class="help">Target Mass is calculated automatically from MW, Target Concentration and Target Volume. Expand Details for stock preparation, snapshots, formulas and review.</span></div><div class="component-grid-scroll" id="component-table-scroll" data-preserve-scroll><table class="component-grid"><colgroup>${[225, 190, 95, 185, 120, 150, 215, 120, 175, 100].map((w) => `<col style="width:${w}px">`).join("")}</colgroup><thead><tr>${["Chemical Name", "Vendor", "MW (g/mol)", "Target Concentration", "Target Mass (mg)", "Target Liquid Volume (µL)", "Observation", "Error (%)", "Preparation Method", "Review"].map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>${b.components
     .map((c, i) => {
       const r = results.rows?.[i] || {},
         p = `components.${i}`,
         method = r.method || c.method,
         expanded = expandedComponents.has(c.id),
         vendor = vendorDescription(c);
+      const missingTargetInput = [
+        ["volume", b.volume, "Set Target Volume"],
+        [`${p}.mw`, c.mw, "Enter MW"],
+        [`${p}.target`, c.target, "Set Target Conc."],
+      ].find(([, value]) => value == null || String(value).trim() === "");
+      const targetMass =
+        r.requiredMg != null
+          ? fmt(r.requiredMg)
+          : missingTargetInput
+            ? button(
+                "focus-input",
+                missingTargetInput[2],
+                "small target-mass-prompt",
+                `data-path="${missingTargetInput[0]}" title="Target Mass needs MW, Target Concentration and Target Volume. Click to enter the missing value."`,
+              )
+            : button(
+                "target-mass-help",
+                "Check inputs",
+                "small target-mass-prompt",
+                `data-index="${i}" title="${escape(r.errors?.[0] || "Check MW, Target Concentration and Target Volume.")}"`,
+              );
       const methods =
         c.form === "solution"
           ? [["existing", "Existing stock"]]
@@ -345,7 +366,7 @@ function componentTable(b, results) {
                 ["new", "New stock"],
                 ["existing", "Existing stock"],
               ];
-      const main = `<tr class="component-row" data-component-id="${c.id}"><td><span class="two-line" title="${escape(c.name)}">${escape(c.name)}</span>${button("toggle-component", expanded ? "Collapse" : "Details", "small", `data-id="${c.id}" aria-expanded="${expanded}"`)}${r.forcedStock ? '<span class="badge amber">Stock required</span>' : ""}</td><td><button class="cell-peek" data-action="vendor-detail" data-index="${i}" title="${escape(vendor)}"><span class="two-line">${escape(vendor)}</span></button></td><td>${compact(input(`${p}.mw`, "Molecular Weight (g/mol)"))}</td><td>${compact(quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration))}</td><td>${fmt(r.requiredMg)}</td><td>${fmt(r.requiredLiquidUL)}${c.form === "pure-liquid" || c.form === "solution" ? `<span class="observation-kind">Density (g/mL)</span>${compact(input(`${p}.density`, "Density (g/mL)"))}` : ""}</td><td>${observationInput(c, i, r)}</td><td>${method === "new" ? `${fmt(r.stockMassErrorPercent, true)}<span class="observation-kind">Stock weighing${r.stockMassErrorPercent == null ? " — target not set" : ""}</span>` : method === "direct" ? `${fmt(r.massErrorPercent, true)}${r.massErrorBasis === "Calculated from observed volume" ? '<span class="observation-kind">From observed volume</span>' : ""}` : "—"}</td><td>${compact(
+      const main = `<tr class="component-row" data-component-id="${c.id}"><td><span class="two-line" title="${escape(c.name)}">${escape(c.name)}</span>${button("toggle-component", expanded ? "Collapse" : "Details", "small", `data-id="${c.id}" aria-expanded="${expanded}"`)}${r.forcedStock ? '<span class="badge amber">Stock required</span>' : ""}</td><td><button class="cell-peek" data-action="vendor-detail" data-index="${i}" title="${escape(vendor)}"><span class="two-line">${escape(vendor)}</span></button></td><td>${compact(input(`${p}.mw`, "Molecular Weight (g/mol)"))}</td><td>${compact(quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration))}</td><td class="target-mass-cell">${targetMass}</td><td>${fmt(r.requiredLiquidUL)}${c.form === "pure-liquid" || c.form === "solution" ? `<span class="observation-kind">Density (g/mL)</span>${compact(input(`${p}.density`, "Density (g/mL)"))}` : ""}</td><td>${observationInput(c, i, r)}</td><td>${method === "new" ? `${fmt(r.stockMassErrorPercent, true)}<span class="observation-kind">Stock weighing${r.stockMassErrorPercent == null ? " — target not set" : ""}</span>` : method === "direct" ? `${fmt(r.massErrorPercent, true)}${r.massErrorBasis === "Calculated from observed volume" ? '<span class="observation-kind">From observed volume</span>' : ""}` : "—"}</td><td>${compact(
         select(`${p}.form`, "Physical Form", [
           ["", "Physical form"],
           ["solid", "Solid"],
@@ -519,6 +540,19 @@ function showDetail(title, value) {
   document.querySelector("#detail-content").value = String(value ?? "");
   document.querySelector("#detail-dialog").showModal();
 }
+app.addEventListener("paste", (event) => {
+  const target = event.target;
+  if (target.id !== "inventory-query" || !event.clipboardData) return;
+  const text = event.clipboardData.getData("text/plain");
+  if (!text) return;
+  event.preventDefault();
+  // Handle line breaks before the single-line input joins adjacent words.
+  const start = target.selectionStart,
+    end = target.selectionEnd;
+  target.setRangeText(cleanInventorySearchText(text, { trim: start === 0 && end === target.value.length }), start, end, "end");
+  query = target.value;
+  render();
+});
 app.addEventListener("input", (event) => {
   const target = event.target;
   if (target.id === "inventory-query") {
@@ -539,7 +573,10 @@ app.addEventListener("input", (event) => {
 app.addEventListener("change", async (event) => {
   const t = event.target;
   try {
-    if (t.id === "local-inventory-file") {
+    if (t.id === "inventory-query") {
+      query = t.value;
+      render();
+    } else if (t.id === "local-inventory-file") {
       const file = t.files[0];
       if (file) await chooseLocalInventory(file);
     } else if (t.id === "record-file") {
@@ -577,6 +614,20 @@ app.addEventListener("click", async (event) => {
   try {
     if (action === "reload-inventory") {
       await refreshBuiltinInventory();
+      return;
+    }
+    if (action === "focus-input") {
+      const target = document.querySelector(`[data-path="${b.dataset.path}"]`);
+      target?.scrollIntoView({ block: "center", inline: "nearest" });
+      target?.focus({ preventScroll: true });
+      return;
+    }
+    if (action === "target-mass-help") {
+      const r = results().rows?.[Number(b.dataset.index)];
+      showDetail(
+        "Automatic Target Mass",
+        `${r?.errors?.[0] || "Check MW, Target Concentration and Target Volume."}\n\nTarget Mass (mg) = Target Concentration (mM) × Target Volume (mL) × MW (g/mol) / 1000.\nObserved mass is not required to calculate Target Mass.`,
+      );
       return;
     }
     if (action === "toggle-component") {

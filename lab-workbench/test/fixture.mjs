@@ -86,6 +86,7 @@ export async function setupBuffer(p) {
   await p.goto("#buffer");
   await p.locator("#inventory-query").waitFor();
   await field(p, "name").fill("Compact preparation");
+  await field(p, "volumeUnit").selectOption("mL");
   await field(p, "volume").fill("1000");
   await addComponent(p);
 }
