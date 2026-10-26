@@ -211,7 +211,7 @@ p {
   border: 1px solid var(--line);
   border-radius: 10px;
   margin-bottom: 20px;
-  overflow: hidden;
+  overflow: visible;
 }
 .panel-heading {
   padding: 19px 22px;
@@ -434,7 +434,7 @@ a.module:hover {
   margin: 0;
 }
 .table-wrap {
-  overflow-x: auto;
+  overflow: visible;
   width: 100%;
 }
 table {
@@ -465,7 +465,7 @@ tr:last-child td {
 }
 .results-table {
   table-layout: fixed;
-  min-width: 930px;
+  min-width: 0;
 }
 .results-table th:first-child {
   width: 18%;
@@ -477,7 +477,7 @@ tr:last-child td {
   font-size: 14px;
 }
 .inventory-table {
-  min-width: 650px;
+  min-width: 0;
 }
 .inventory-table th {
   white-space: nowrap;
@@ -590,7 +590,7 @@ summary {
   margin-bottom: 0;
 }
 .plan-table {
-  min-width: 1050px;
+  min-width: 0;
 }
 .plan-table td:last-child {
   max-width: 270px;
@@ -708,7 +708,7 @@ pre {
     gap: 14px;
   }
   .nav {
-    overflow-x: auto;
+    overflow: visible;
     width: 100%;
   }
   .nav a {
@@ -774,7 +774,7 @@ pre {
 }
 .inventory-results th,
 .inventory-results td {
-  overflow: hidden;
+  overflow: visible;
   overflow-wrap: normal;
   word-break: normal;
   vertical-align: middle;
@@ -846,19 +846,19 @@ dialog textarea {
   border: 1px solid var(--line);
   border-radius: 5px;
 }
-/* Compact comparison grids; all overflow stays inside each table. */
+/* Compact comparison tables adapt to labelled fields at smaller widths. */
 .inventory-results th,
 .inventory-results td {
   padding: 7px 8px;
 }
 .component-grid-scroll {
-  max-height: 72vh;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   width: 100%;
 }
 .component-grid {
   table-layout: fixed;
-  width: 1575px;
+  width: 100%;
   min-width: 100%;
 }
 .component-grid thead th {
@@ -931,53 +931,10 @@ dialog textarea {
 }
 @media (max-width: 700px) {
   .component-grid-scroll {
-    max-height: 75vh;
+    max-height: none;
   }
 }
 
-.inventory-results th:first-child,
-.inventory-results td:first-child {
-  position: sticky;
-  left: 0;
-  background: #fff;
-  z-index: 1;
-}
-.inventory-results th:first-child {
-  background: #f4f8fa;
-  z-index: 3;
-}
-.component-grid .component-row > td:first-child {
-  position: sticky;
-  left: 0;
-  background: #fff;
-  z-index: 1;
-}
-.component-grid thead th:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 4;
-}
-.component-grid .component-row > td:first-child > button {
-  margin-top: 5px;
-}
-
-.inventory-results {
-  min-width: 0;
-}
-.inventory-results .add-component {
-  min-width: 120px;
-}
-@media (max-width: 700px) {
-  .inventory-results th:first-child,
-  .inventory-results td:first-child,
-  .component-grid .component-row > td:first-child {
-    position: static;
-    left: auto;
-  }
-  .component-grid thead th:first-child {
-    left: auto;
-  }
-}
 .inventory-source-controls {
   display: flex;
   flex-wrap: wrap;
@@ -997,6 +954,301 @@ dialog textarea {
   background: #f4f9f9;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+/* Every region fits its available width; long values have full-content controls. */
+.shell,
+.workspace,
+.panel,
+.panel-body,
+.panel-heading,
+.stock-card,
+.grid > *,
+.stock-grid > *,
+.title-row > *,
+.result-strip > *,
+td,
+th {
+  min-width: 0;
+  max-width: 100%;
+}
+.header,
+.nav,
+.panel-heading,
+.review-bar,
+.stock-card h3 {
+  flex-wrap: wrap;
+}
+.nav {
+  overflow: visible;
+}
+.logo,
+.check input {
+  flex-shrink: 0;
+}
+.actions,
+.title-row,
+.review-bar {
+  min-width: 0;
+}
+button,
+.button {
+  max-width: 100%;
+  word-break: normal;
+}
+th,
+td {
+  padding: 7px 6px;
+  font-size: 12px;
+}
+.table-wrap,
+.component-grid-scroll {
+  overflow: visible;
+  width: 100%;
+  max-height: none;
+}
+table {
+  max-width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.component-grid,
+.inventory-results,
+.plan-table,
+.results-table,
+.inventory-table {
+  width: 100%;
+  min-width: 0;
+}
+.inventory-table th {
+  white-space: normal;
+}
+.inventory-results th,
+.inventory-results td,
+.component-grid td {
+  padding: 7px 6px;
+}
+.inventory-results .add-component {
+  min-width: 0;
+  padding: 7px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.component-grid .badge {
+  font-size: 11px;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.component-grid .compact-field input,
+.component-grid .compact-field select {
+  font-size: 12px;
+  padding: 5px;
+}
+.unit-field input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.unit-field select,
+.component-grid .unit-field select {
+  flex: 0 0 93px;
+}
+.component-grid .compact-field .unit-field select {
+  flex-basis: 78px;
+}
+.component-grid .component-row > td:first-child > button:not(.component-name) {
+  margin-top: 5px;
+}
+.snapshot {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 10px 14px;
+}
+.snapshot > span {
+  min-width: 0;
+}
+.result-strip {
+  gap: 14px;
+  padding: 12px;
+}
+.result-strip > div {
+  flex: 1 1 150px;
+}
+.notice,
+.help {
+  overflow-wrap: anywhere;
+}
+.date-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.date-control input {
+  flex: 1 1 140px;
+}
+.day-of-year {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--teal);
+}
+.day-of-year:empty {
+  display: none;
+}
+.toast {
+  max-width: min(440px, calc(100vw - 32px));
+  right: 16px;
+  overflow-wrap: anywhere;
+}
+dialog {
+  max-width: 90vw;
+}
+@media (max-width: 1279px) {
+  table,
+  tbody {
+    display: block;
+    width: 100%;
+  }
+  colgroup,
+  thead {
+    display: none;
+  }
+  .inventory-results tbody > tr,
+  .component-grid tbody > .component-row,
+  .plan-table tbody > tr,
+  .results-table tbody > tr,
+  .inventory-table tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px 8px;
+    padding: 9px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    display: block;
+    width: auto;
+    border: 0;
+    padding: 5px;
+  }
+  td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+  .inventory-add::before {
+    display: none;
+  }
+  .inventory-results td:nth-child(2) {
+    grid-column: span 3;
+  }
+  .inventory-results td:first-child {
+    align-self: start;
+  }
+  .component-row > td:first-child {
+    grid-column: 1 / 3;
+  }
+  .component-row > td:nth-child(2) {
+    grid-column: 3 / -1;
+  }
+  .component-details {
+    display: block;
+    width: 100%;
+  }
+  .component-details > td {
+    display: block;
+    width: 100%;
+    padding: 0;
+  }
+  .component-details > td::before {
+    display: none;
+  }
+  .component-grid .component-row > td,
+  .inventory-results td {
+    overflow: visible;
+  }
+  .plan-table th,
+  .plan-table td:last-child {
+    max-width: none;
+  }
+  .plan-table td:last-child {
+    grid-column: 1 / -1;
+  }
+  .component-grid .compact-field input,
+  .component-grid .compact-field select {
+    height: 34px;
+    font-size: 13px;
+  }
+  .inventory-table td:last-child {
+    grid-column: 1 / -1;
+  }
+  .component-grid .badge {
+    display: inline-block;
+  }
+}
+@media (max-width: 700px) {
+  .inventory-results tbody > tr,
+  .component-grid tbody > .component-row,
+  .plan-table tbody > tr,
+  .results-table tbody > tr,
+  .inventory-table tbody > tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 7px;
+  }
+  .inventory-results td:nth-child(2) {
+    grid-column: auto;
+  }
+  .component-row > td:first-child,
+  .component-row > td:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+  .component-row > td:last-child {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .component-row > td:last-child::before {
+    flex-basis: 100%;
+  }
+  .panel-body,
+  .component-details .panel-body {
+    padding: 12px;
+  }
+  .panel-heading {
+    padding: 12px;
+  }
+  .stock-card {
+    padding: 12px;
+  }
+  .stock-card .grid.two {
+    grid-template-columns: 1fr;
+  }
+  .component-details .grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .review-bar {
+    padding: 12px;
+  }
+  .stock-card h3 {
+    gap: 8px;
+  }
+  .inventory-source-controls .field {
+    min-width: min(220px, 100%);
+  }
+  .title-row,
+  .solvent {
+    flex-wrap: wrap;
+  }
+  dialog {
+    padding: 16px;
+  }
 }
 </style></head><body>
 <a class="skip-link" href="#main">Skip to workbench</a><div id="app"></div><div id="toast" class="toast" role="status" aria-live="polite"></div><noscript>This workbench requires JavaScript.</noscript>
@@ -1368,19 +1620,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               r.stockMassBasis = "Measured mass";
               if (c.form === "pure-liquid" && density) r.stockCalculatedVolumeUL = finite(r.stockActualMassMg / density);
             }
-            if (supplied(c.stockTargetMass)) {
-              try {
-                r.stockTargetMassMg = namedMass(c.stockTargetMass, c.stockTargetMassUnit || "mg", "Stock target mass");
-                const deviation = massError(r.stockActualMassMg, r.stockTargetMassMg);
-                r.stockMassDeviationMg = deviation.deviationMg;
-                r.stockMassErrorPercent = deviation.errorPercent;
-                formulas.push(
-                  `Stock weighing error (%) = (${r.stockActualMassMg} - ${r.stockTargetMassMg}) / ${r.stockTargetMassMg} \xD7 100 = ${r.stockMassErrorPercent}; this is not a buffer concentration error.`
-                );
-              } catch (e) {
-                errors.push(e.message);
-              }
-            }
             r.stockFinalVolumeUL = namedVolume(c.stockVolume, c.stockVolumeUnit, "Stock final solution volume");
             r.stockMM = stockFromWeight(r.stockActualMassMg, mw, r.stockFinalVolumeUL);
             availableUL = r.stockFinalVolumeUL;
@@ -1512,6 +1751,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
 
+  // src/calendar-date.mjs
+  function calendarDateInfo(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ""));
+    if (!match) return null;
+    const [year, month, day] = match.slice(1).map(Number);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]) return null;
+    const dayOfYear = days.slice(0, month - 1).reduce((sum, n) => sum + n, day);
+    return { date: value, year, dayOfYear, label: `Day ${dayOfYear} of ${year}` };
+  }
+
   // src/models.mjs
   var uid = () => globalThis.crypto.randomUUID();
   function blankStock(role) {
@@ -1560,7 +1811,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     preparationDate: "",
     targetPH: "",
     volume: "",
-    volumeUnit: "\xB5L",
+    volumeUnit: "mL",
     components: [],
     demo: false
   });
@@ -1582,8 +1833,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       inventorySource: source,
       inventoryVersion: version,
       inventoryUpdatedAt: updatedAt,
-      stockTargetMass: "",
-      stockTargetMassUnit: "mg",
       inventoryMapping: structuredClone(mapping),
       observationMethod: "volume",
       stockObservationMethod: "mass",
@@ -1654,6 +1903,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       createdAt,
       updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       inputs: structuredClone(inputs),
+      calendarDates: {
+        preparation: calendarDateInfo(inputs.preparationDate),
+        stocks: kind === "sis" ? inputs.cocktails.flatMap((c) => ["S", "IS"].map((role) => ({ cocktailId: c.id, role, ...calendarDateInfo(c.stocks[role].date) }))) : []
+      },
       results: structuredClone(results2)
     };
   }
@@ -2181,7 +2434,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           r.requiredMg ?? null,
           r.requiredLiquidUL ?? null,
           observation(c, r),
-          method === "direct" ? r.massErrorPercent ?? null : method === "new" ? r.stockMassErrorPercent ?? null : null
+          method === "direct" ? r.massErrorPercent ?? null : null
         ]
       });
       if (method === "new" || method === "existing") {
@@ -2235,7 +2488,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       ["Volume Unit", record.inputs.volumeUnit],
       ["Volume Basis", "Final volume includes all stocks and liquids; bring to the final volume."],
       ["Target pH", number(record.inputs.targetPH)],
-      ["Record Status", status]
+      ["Record Status", status],
+      ["Day of Year", calendarDateInfo(record.inputs.preparationDate)?.dayOfYear ?? null]
     ];
     information.forEach(([label, value], i) => {
       const row = i + 4;
@@ -2246,6 +2500,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       ws.getCell(row, 2).alignment = { wrapText: true, vertical: "middle" };
       ws.getRow(row).height = i === 5 ? 29 : 21;
     });
+    const dateInfo = calendarDateInfo(record.inputs.preparationDate);
+    if (dateInfo) ws.getCell("B12").numFmt = `"Day "0" of ${dateInfo.year}"`;
     ws.getCell("A1").note = `Record ID: ${record.id}
 Rule version: ${record.ruleVersion}
 ${record.demo ? "Demo data" : "User preparation"}`;
@@ -2316,7 +2572,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
     );
     if (rows.stocks.length)
       note(
-        "Stock weighing observations and Error values refer only to stock preparation. Stock weighing Error is shown only for an explicit Stock Target Mass; it is not final buffer concentration error. Existing-stock mass observations and Error remain blank."
+        "Stock weighing observations refer to stock preparation; stock Error is left blank. Stock concentration and transfer use the actual stock preparation inputs. Existing-stock mass observations remain blank."
       );
     cursor++;
     section(cursor++, "C. Stock Solutions");
@@ -2341,13 +2597,6 @@ Only the selected observation basis is used; displayed values are rounded, recor
     } else {
       note("No stock solutions used.");
     }
-    for (const c of record.inputs.components) {
-      const r = record.results.rows?.find((x) => x.id === c.id);
-      if (r?.method === "new" && r.stockTargetMassMg != null)
-        note(
-          `${c.name}: stock weighing Error uses an explicit stock target mass of ${formatResult(r.stockTargetMassMg)} mg. The actual stock concentration and transfer use the observed mass, not the target mass.`
-        );
-    }
     if (record.inputs.components.some(
       (c) => c.form === "pure-liquid" && c.stockObservationMethod === "volume" && (record.results.rows?.find((r) => r.id === c.id)?.method || c.method) === "new"
     ))
@@ -2368,6 +2617,20 @@ Only the selected observation basis is used; displayed values are rounded, recor
     };
     ws.headerFooter.oddFooter = "Lab Preparation Workbench \xB7 &P / &N";
     return ws;
+  }
+
+  // src/buffer-view.mjs
+  function bufferPresentationResults(results2) {
+    const errors = (list) => (list || []).filter((text) => !/^(?:Component \d+: )?Stock target mass\b/i.test(text));
+    return {
+      ...results2,
+      errors: errors(results2.errors),
+      rows: (results2.rows || []).map((row) => ({
+        ...row,
+        errors: errors(row.errors),
+        formulas: (row.formulas || []).filter((text) => !/^Stock weighing error\b/i.test(text))
+      }))
+    };
   }
 
   // src/excel.mjs
@@ -2477,6 +2740,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
     return ws;
   }
   async function createPreparationWorkbook(record, Excel = globalThis.ExcelJS) {
+    if (record.kind === "buffer") record = { ...record, results: bufferPresentationResults(record.results) };
     if (!Excel?.Workbook) throw new Error("Excel export is unavailable. Reload the workbench.");
     const wb = new Excel.Workbook();
     wb.creator = "Lab Preparation Workbench";
@@ -2497,6 +2761,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
             name: s.name,
             lot: s.lot,
             date: s.date,
+            dayOfYear: calendarDateInfo(s.date)?.label ?? null,
             solvent: s.solvent,
             mw: numeric(s.mw),
             source: s.source,
@@ -2531,6 +2796,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
           col("name", "Compound", 36),
           col("lot", "Lot", 22),
           col("date", "Preparation Date", 20),
+          col("dayOfYear", "Day of Year", 22),
           col("solvent", "Solvent", 28),
           col("mw", "MW (g/mol)", 18),
           col("source", "Stock Data Source", 24),
@@ -2622,6 +2888,10 @@ Only the selected observation basis is used; displayed values are rounded, recor
   }
   function input(path, label, placeholder = "", type = "text") {
     const value = get(editor().inputs, path);
+    if (type === "date") {
+      const info = calendarDateInfo(value);
+      return `<label class="field date-field">${escape(label)}<span class="date-control"><input data-path="${path}" id="f-${path}${fieldScope}" type="date" value="${escape(value)}"><output class="day-of-year" aria-live="polite">${escape(info?.label || "")}</output></span></label>`;
+    }
     return `<label class="field">${escape(label)}<input data-path="${path}" id="f-${path}${fieldScope}" type="${type}" ${type === "text" && /(mass|mw|target|volume|density|concentration|available|minimum|threshold|amount|actual|prepVolume|sampleVolume)/i.test(path) ? 'inputmode="decimal"' : ""} value="${escape(value)}" placeholder="${escape(placeholder)}" autocomplete="off"></label>`;
   }
   function select(path, label, options) {
@@ -2641,7 +2911,8 @@ Only the selected observation basis is used; displayed values are rounded, recor
   var badge = (text, cls = "") => `<span class="badge ${cls}">${escape(text)}</span>`;
   function results() {
     const e = editor();
-    return e.snapshot && !e.dirty ? e.snapshot.results : evaluate(route, e.inputs);
+    const r = e.snapshot && !e.dirty ? e.snapshot.results : evaluate(route, e.inputs);
+    return route === "buffer" ? bufferPresentationResults(r) : r;
   }
   function invalidate() {
     const e = editor();
@@ -2742,15 +3013,18 @@ Only the selected observation basis is used; displayed values are rounded, recor
       return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${inventorySourceControls()}<p role="status">Loading inventory\u2026</p></div></section>`;
     if (!inventory)
       return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${inventorySourceControls()}${messages([inventoryError || "Inventory is unavailable."])}${button("reload-inventory", "Retry loading")}</div></section>`;
-    const matches = matchingRows(inventory.rows, inventory.mapping, query), width = INVENTORY_COLUMNS.reduce((n, c) => n + c.width, 0) + 140;
-    return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC \xB7 ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file \u2014 ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventoryImportNotice()}${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> \u2014 Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory\u2026" autocomplete="off"></label>${query ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " \xB7 Showing the first 30; refine your search." : ""} \xB7 Click a cell to view and copy its full contents.</p>${matches.length ? `<div class="table-wrap inventory-results-wrap" id="inventory-results-scroll" data-preserve-scroll><table class="inventory-results" style="width:${width}px"><colgroup>${INVENTORY_COLUMNS.map((c) => `<col style="width:${c.width}px">`).join("")}<col style="width:140px"></colgroup><thead><tr>${INVENTORY_COLUMNS.map((c) => `<th class="${c.identifier ? "identifier-column" : ""}"><span class="two-line">${c.label}</span></th>`).join("")}<th>Action</th></tr></thead><tbody>${matches.slice(0, 30).map(
-      (row) => `<tr>${INVENTORY_COLUMNS.map((c) => {
-        const text = inventoryValue(row, inventory.mapping, c.key);
-        return `<td class="${c.identifier ? "identifier-column" : ""}"><button class="cell-peek" data-action="inventory-cell" data-index="${inventory.rows.indexOf(row)}" data-key="${c.key}" data-header="${c.label}" title="${escape(text)}"><span class="two-line">${escape(text)}</span></button></td>`;
-      }).join(
-        ""
-      )}<td>${button("add-component", "Add Component", "small add-component", `data-index="${inventory.rows.indexOf(row)}"`)}</td></tr>`
-    ).join("")}</tbody></table></div>` : '<div class="empty">No matching inventory entries. Refine your search.</div>'}` : ""}</div></section>`;
+    const matches = matchingRows(inventory.rows, inventory.mapping, query);
+    const columns = [10, 17, 8, 6, 9, 9, 8, 5, 8, 5, 6, 9];
+    const table = matches.length ? `<div class="table-wrap inventory-results-wrap" id="inventory-results-scroll"><table class="inventory-results"><colgroup>${columns.map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr><th>Add Component</th>${INVENTORY_COLUMNS.map((c) => `<th class="${c.identifier ? "identifier-column" : ""}"><button class="cell-peek" data-action="inventory-header" data-header="${c.label}" title="${c.label}"><span class="two-line">${c.label}</span></button></th>`).join("")}</tr></thead><tbody>${matches.slice(0, 30).map((row) => {
+      const index = inventory.rows.indexOf(row);
+      return `<tr><td class="inventory-add">${button("add-component", "Add Component", "small add-component", `data-index="${index}"`)}</td>${INVENTORY_COLUMNS.map(
+        (c) => {
+          const text = inventoryValue(row, inventory.mapping, c.key);
+          return `<td class="${c.identifier ? "identifier-column" : ""}"><button class="cell-peek" data-action="inventory-cell" data-index="${index}" data-key="${c.key}" data-header="${c.label}" title="${escape(text)}"><span class="two-line">${escape(text)}</span></button></td>`;
+        }
+      ).join("")}</tr>`;
+    }).join("")}</tbody></table></div>` : '<div class="empty">No matching inventory entries. Refine your search.</div>';
+    return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC \xB7 ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file \u2014 ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventoryImportNotice()}${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> \u2014 Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory\u2026" autocomplete="off"></label>${query ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " \xB7 Showing the first 30; refine your search." : ""} \xB7 Click a cell to view and copy its full contents.</p>${table}` : ""}</div></section>`;
   }
   function bufferComponent(c, i, result) {
     const p = `components.${i}`, r = result || calculateBufferComponent(c, editor().inputs.volume, editor().inputs.volumeUnit);
@@ -2763,21 +3037,21 @@ Only the selected observation basis is used; displayed values are rounded, recor
       actualInputs = quantity(`${p}.actualMass`, "Observed Mass \u2014 Measured", `${p}.massUnit`, ["mg", "g"]);
       if (c.form === "pure-liquid") actualInputs += quantity(`${p}.actualLiquid`, "Observed Volume \u2014 Measured", `${p}.liquidUnit`, ["\xB5L", "mL"]);
     } else if (method === "new") {
-      actualInputs = quantity(`${p}.actualMass`, "Stock Actual Mass \u2014 Measured", `${p}.massUnit`, units.mass) + (stockObservation ? quantity(`${p}.actualLiquid`, "Stock Pure-liquid Volume \u2014 Measured", `${p}.liquidUnit`, ["\xB5L", "mL"]) : "") + quantity(`${p}.stockVolume`, "Stock Final Solution Volume", `${p}.stockVolumeUnit`, units.volume) + quantity(`${p}.stockTargetMass`, "Stock Target Mass (optional)", `${p}.stockTargetMassUnit`, ["mg", "g"]) + quantity(`${p}.actualTransfer`, "Observed Stock Transfer Volume (optional)", `${p}.transferUnit`, ["\xB5L", "mL"]);
+      actualInputs = quantity(`${p}.actualMass`, "Stock Actual Mass \u2014 Measured", `${p}.massUnit`, units.mass) + (stockObservation ? quantity(`${p}.actualLiquid`, "Stock Pure-liquid Volume \u2014 Measured", `${p}.liquidUnit`, ["\xB5L", "mL"]) : "") + quantity(`${p}.stockVolume`, "Stock Final Solution Volume", `${p}.stockVolumeUnit`, units.volume) + quantity(`${p}.actualTransfer`, "Observed Stock Transfer Volume (optional)", `${p}.transferUnit`, ["\xB5L", "mL"]);
     } else {
       actualInputs = quantity(`${p}.knownConcentration`, "Known Stock Concentration", `${p}.knownUnit`, units.concentration) + quantity(`${p}.available`, "Available Existing Stock Volume", `${p}.availableUnit`, units.volume);
-      if (c.form === "solution") actualInputs += quantity(`${p}.actualMass`, "Observed Solution Mass \u2014 Measured", `${p}.massUnit`, ["mg", "g"]);
-      actualInputs += quantity(`${p}.actualTransfer`, "Observed Stock Transfer Volume (optional)", `${p}.transferUnit`, ["\xB5L", "mL"]);
     }
     const deviation = method === "direct" ? `<div class="result-strip mass-error-strip"><div><small>Mass Deviation</small><strong>${fmt(r.massDeviationMg, true)} mg</strong></div><div><small>Mass Error (%)</small><strong>${fmt(r.massErrorPercent, true)}%</strong></div></div><p class="help">Positive = more mass than target; negative = less mass than target. No acceptance threshold is applied.${r.massErrorBasis === "Calculated from observed volume" ? " Mass error is calculated from observed volume." : ""}</p>` : "";
     return `<section class="panel component-panel"><div class="panel-heading"><h2>${escape(c.name)} ${badge(`Component ${i + 1}`)}</h2>${button("remove-component", "Remove component", "small danger", `data-index="${i}"`)}</div><div class="snapshot" aria-label="Selected inventory row">${summaryEntries(
       c.inventory
-    ).map(([k, v]) => `<span><b>${escape(k)}</b>${escape(v)}</span>`).join("")}</div><div class="panel-body"><div class="grid">${input(`${p}.mw`, "Molecular Weight (g/mol)")}${select(`${p}.form`, "Physical Form", [
+    ).map(
+      ([k, v]) => `<span><b>${escape(k)}</b><button class="cell-peek" data-action="snapshot-field" data-index="${i}" data-key="${escape(k)}" title="${escape(v)}"><span class="two-line">${escape(v)}</span></button></span>`
+    ).join("")}</div><div class="panel-body"><div class="grid">${input(`${p}.mw`, "Molecular Weight (g/mol)")}${select(`${p}.form`, "Physical Form", [
       ["", "Select physical form"],
       ["solid", "Solid"],
       ["pure-liquid", "Pure liquid"],
       ["solution", "Solution of known concentration"]
-    ])}${c.form === "pure-liquid" || c.form === "solution" ? input(`${p}.density`, c.form === "solution" ? "Solution Density (g/mL; required for By Mass)" : "Density (g/mL)") : ""}${quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration)}</div><p class="help">Verify the exact salt and hydrate form. Molecular weight, physical form, and density are never inferred from a name.</p><div class="result-strip"><div><small>Target Mass (Required Mass)</small><strong>${fmt(r.requiredMg)} mg</strong></div>${r.requiredLiquidUL != null ? `<div><small>Target Liquid Volume</small><strong>${fmt(r.requiredLiquidUL)} \xB5L</strong></div>` : ""}<div><small>Actual Final Concentration</small><strong>${fmt(r.actualMM)} mM</strong></div></div>${force ? '<div class="notice warning"><strong>Stock required.</strong> Required mass is below 100 mg. Use a new stock or a confirmed existing stock.</div>' : ""}<div class="grid three">${select(
+    ])}${c.form === "pure-liquid" || c.form === "solution" ? input(`${p}.density`, c.form === "solution" ? "Solution Density (g/mL; required for By Mass)" : "Density (g/mL)") : ""}${quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration)}</div><p class="help">Verify the exact salt and hydrate form. Molecular weight, physical form, and density are never inferred from a name.</p><div class="result-strip"><div><small>Target Mass (Required Mass)</small><strong>${fmt(r.requiredMg)} mg</strong></div>${r.requiredLiquidUL != null ? `<div><small>Target Liquid Volume</small><strong>${fmt(r.requiredLiquidUL)} \xB5L</strong></div>` : ""}${method === "direct" ? `<div><small>Actual Final Concentration</small><strong>${fmt(r.actualMM)} mM</strong></div>` : ""}</div>${force ? '<div class="notice warning"><strong>Stock required.</strong> Required mass is below 100 mg. Use a new stock or a confirmed existing stock.</div>' : ""}<div class="grid three">${select(
       `${p}.method`,
       "Preparation Method",
       c.form === "solution" ? [["existing", "Use confirmed existing solution"]] : force ? [
@@ -2791,20 +3065,15 @@ Only the selected observation basis is used; displayed values are rounded, recor
     )}${observation2 ? select(`${p}.${stockObservation ? "stockObservationMethod" : "observationMethod"}`, "Observation Method", [
       ["mass", "By Mass"],
       ["volume", "By Volume"]
-    ]) : ""}</div><h3 class="subhead">Actual Preparation Inputs</h3><div class="grid">${actualInputs}</div>${observation2 ? `<p class="help">Both measured values may be recorded. Only ${byMass ? "measured mass" : "measured volume"} is used as the ${stockObservation ? "stock preparation" : "actual concentration"} basis; values are not averaged or counted twice.${c.form === "solution" ? " Solution mass is not solute mass. By Mass requires solution density and a known solution concentration." : ""}</p>` : ""}${method === "existing" ? `<p>${checkbox(`${p}.confirmed`, "I confirm the existing stock concentration and units.")}</p>` : ""}${r.calculatedMassMg != null || r.calculatedVolumeUL != null ? `<div class="result-strip">${r.calculatedMassMg != null ? `<div><small>Mass \u2014 Calculated from Density</small><strong>${fmt(r.calculatedMassMg)} mg</strong></div>` : ""}${r.calculatedVolumeUL != null ? `<div><small>Volume \u2014 Calculated from Density</small><strong>${fmt(r.calculatedVolumeUL)} \xB5L</strong></div>` : ""}</div>` : ""}${method !== "direct" ? `<div class="result-strip"><div><small>Stock Concentration</small><strong>${fmt(r.stockMM)} mM</strong></div><div><small>Calculated Stock Transfer Volume</small><strong>${fmt(r.stockTransferUL ?? (r.transferML == null ? null : r.transferML * 1e3))} \xB5L</strong></div></div><p class="help">Observed transfer volume is optional. Actual final concentration is left blank until an observed transfer is recorded.</p>` : ""}${r.stockCalculatedMassMg != null || r.stockCalculatedVolumeUL != null ? `<div class="result-strip">${r.stockCalculatedMassMg != null ? `<div><small>Stock Mass \u2014 Calculated from Density</small><strong>${fmt(r.stockCalculatedMassMg)} mg</strong></div>` : ""}${r.stockCalculatedVolumeUL != null ? `<div><small>Stock Pure-liquid Volume \u2014 Calculated from Density</small><strong>${fmt(r.stockCalculatedVolumeUL)} \xB5L</strong></div>` : ""}</div>` : ""}${method === "new" ? `<div class="result-strip"><div><small>Stock Weighing Error (%)</small><strong>${fmt(r.stockMassErrorPercent, true)}%</strong></div></div><p class="help">Stock weighing error is calculated only when an explicit Stock Target Mass is set. It is not a final buffer concentration error.</p>` : ""}${deviation}${messages(r.errors)}${formula(r.formulas)}</div><div class="review-bar">${checkbox(`${p}.reviewed`, "Calculation Review: inputs, units, and formula checked", !!r.errors.length)}${badge(c.reviewed ? "Checked" : "Needs recheck", c.reviewed ? "teal" : "amber")}</div></section>`;
+    ]) : ""}</div><h3 class="subhead">Actual Preparation Inputs</h3><div class="grid">${actualInputs}</div>${observation2 ? `<p class="help">Both measured values may be recorded. Only ${byMass ? "measured mass" : "measured volume"} is used as the ${stockObservation ? "stock preparation" : "actual concentration"} basis; values are not averaged or counted twice.${c.form === "solution" ? " Solution mass is not solute mass. By Mass requires solution density and a known solution concentration." : ""}</p>` : ""}${method === "existing" ? `<p>${checkbox(`${p}.confirmed`, "I confirm the existing stock concentration and units.")}</p>` : ""}${r.calculatedMassMg != null || r.calculatedVolumeUL != null ? `<div class="result-strip">${r.calculatedMassMg != null ? `<div><small>Mass \u2014 Calculated from Density</small><strong>${fmt(r.calculatedMassMg)} mg</strong></div>` : ""}${r.calculatedVolumeUL != null ? `<div><small>Volume \u2014 Calculated from Density</small><strong>${fmt(r.calculatedVolumeUL)} \xB5L</strong></div>` : ""}</div>` : ""}${method !== "direct" ? `<div class="result-strip"><div><small>Calculated Stock Concentration</small><strong>${fmt(r.stockMM)} mM</strong></div><div><small>Calculated Stock Transfer Volume</small><strong>${fmt(r.stockTransferUL ?? (r.transferML == null ? null : r.transferML * 1e3))} \xB5L</strong></div></div><p class="help">Observed transfer volume is optional.</p>` : ""}${r.stockCalculatedMassMg != null || r.stockCalculatedVolumeUL != null ? `<div class="result-strip">${r.stockCalculatedMassMg != null ? `<div><small>Stock Mass \u2014 Calculated from Density</small><strong>${fmt(r.stockCalculatedMassMg)} mg</strong></div>` : ""}${r.stockCalculatedVolumeUL != null ? `<div><small>Stock Pure-liquid Volume \u2014 Calculated from Density</small><strong>${fmt(r.stockCalculatedVolumeUL)} \xB5L</strong></div>` : ""}</div>` : ""}${deviation}${messages(r.errors)}${formula(r.formulas)}</div><div class="review-bar">${checkbox(`${p}.reviewed`, "Calculation Review: inputs, units, and formula checked", !!r.errors.length)}${badge(c.reviewed ? "Checked" : "Needs recheck", c.reviewed ? "teal" : "amber")}</div></section>`;
   }
   var compact = (html) => html.replace('class="field"', 'class="field compact-field"');
   function observationInput(c, i, r) {
     const p = `components.${i}`, method = r.method || c.method;
     if (method === "new") {
-      if (c.form === "pure-liquid")
-        return `<span class="observation-kind">Stock preparation</span>${compact(
-          select(`${p}.stockObservationMethod`, "Stock Observation Method", [
-            ["mass", "By Mass"],
-            ["volume", "By Volume"]
-          ])
-        )}${(c.stockObservationMethod || "mass") === "volume" ? compact(quantity(`${p}.actualLiquid`, "Stock Observed Pure-liquid Volume", `${p}.liquidUnit`, ["\xB5L", "mL"])) : compact(quantity(`${p}.actualMass`, "Stock Observed Mass", `${p}.massUnit`, ["mg", "g"]))}`;
-      return `<span class="observation-kind">Stock weighing</span>${compact(quantity(`${p}.actualMass`, "Stock Observed Mass", `${p}.massUnit`, ["mg", "g"]))}`;
+      const byVolume = c.form === "pure-liquid" && c.stockObservationMethod === "volume";
+      const value = byVolume ? c.actualLiquid : c.actualMass, unit = byVolume ? c.liquidUnit : c.massUnit;
+      return `<span class="observation-kind">${byVolume ? "Stock pure-liquid volume" : "Stock weighing"}</span><span>${String(value ?? "").trim() ? `${escape(value)} ${escape(unit)}` : "Not recorded"}</span><span class="observation-kind">Edit stock in Details</span>`;
     }
     if (method === "existing") {
       if (c.form === "solution")
@@ -2827,7 +3096,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
   }
   function componentTable(b, results2) {
     if (!b.components.length) return '<div class="empty">No components yet. Search the current inventory and select Add Component.</div>';
-    return `<section class="panel"><div class="panel-heading"><h2>Components</h2><span class="help">Target Mass is calculated automatically from MW, Target Concentration and Target Volume. Expand Details for stock preparation, snapshots, formulas and review.</span></div><div class="component-grid-scroll" id="component-table-scroll" data-preserve-scroll><table class="component-grid"><colgroup>${[225, 190, 95, 185, 120, 150, 215, 120, 175, 100].map((w) => `<col style="width:${w}px">`).join("")}</colgroup><thead><tr>${["Chemical Name", "Vendor", "MW (g/mol)", "Target Concentration", "Target Mass (mg)", "Target Liquid Volume (\xB5L)", "Observation", "Error (%)", "Preparation Method", "Review"].map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>${b.components.map((c, i) => {
+    return `<section class="panel"><div class="panel-heading"><h2>Components</h2><span class="help">Target Mass is calculated automatically from MW, Target Concentration and Target Volume. Expand Details for stock preparation, snapshots, formulas and review.</span></div><div class="component-grid-scroll" id="component-table-scroll" data-preserve-scroll><table class="component-grid"><colgroup>${[17, 10, 6, 12, 9, 8, 13, 6, 10, 9].map((w) => `<col style="width:${w}%">`).join("")}</colgroup><thead><tr>${["Chemical Name", "Vendor", "MW (g/mol)", "Target Concentration", "Target Mass (mg)", "Target Liquid Volume (\xB5L)", "Observation", "Error (%)", "Preparation Method", "Review"].map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>${b.components.map((c, i) => {
       const r = results2.rows?.[i] || {}, p = `components.${i}`, method = r.method || c.method, expanded = expandedComponents.has(c.id), vendor = vendorDescription(c);
       const missingTargetInput = [
         ["volume", b.volume, "Set Target Volume"],
@@ -2853,7 +3122,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
         ["new", "New stock"],
         ["existing", "Existing stock"]
       ];
-      const main = `<tr class="component-row" data-component-id="${c.id}"><td><span class="two-line" title="${escape(c.name)}">${escape(c.name)}</span>${button("toggle-component", expanded ? "Collapse" : "Details", "small", `data-id="${c.id}" aria-expanded="${expanded}"`)}${r.forcedStock ? '<span class="badge amber">Stock required</span>' : ""}</td><td><button class="cell-peek" data-action="vendor-detail" data-index="${i}" title="${escape(vendor)}"><span class="two-line">${escape(vendor)}</span></button></td><td>${compact(input(`${p}.mw`, "Molecular Weight (g/mol)"))}</td><td>${compact(quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration))}</td><td class="target-mass-cell">${targetMass}</td><td>${fmt(r.requiredLiquidUL)}${c.form === "pure-liquid" || c.form === "solution" ? `<span class="observation-kind">Density (g/mL)</span>${compact(input(`${p}.density`, "Density (g/mL)"))}` : ""}</td><td>${observationInput(c, i, r)}</td><td>${method === "new" ? `${fmt(r.stockMassErrorPercent, true)}<span class="observation-kind">Stock weighing${r.stockMassErrorPercent == null ? " \u2014 target not set" : ""}</span>` : method === "direct" ? `${fmt(r.massErrorPercent, true)}${r.massErrorBasis === "Calculated from observed volume" ? '<span class="observation-kind">From observed volume</span>' : ""}` : "\u2014"}</td><td>${compact(
+      const main = `<tr class="component-row" data-component-id="${c.id}"><td><button class="cell-peek component-name" data-action="component-name" data-index="${i}" title="${escape(c.name)}"><span class="two-line">${escape(c.name)}</span></button>${button("toggle-component", expanded ? "Collapse" : "Details", "small", `data-id="${c.id}" aria-expanded="${expanded}"`)}${r.forcedStock ? '<span class="badge amber">Stock required</span>' : ""}</td><td><button class="cell-peek" data-action="vendor-detail" data-index="${i}" title="${escape(vendor)}"><span class="two-line">${escape(vendor)}</span></button></td><td>${compact(input(`${p}.mw`, "Molecular Weight (g/mol)"))}</td><td>${compact(quantity(`${p}.target`, "Target Concentration", `${p}.targetUnit`, units.concentration))}</td><td class="target-mass-cell">${targetMass}</td><td>${fmt(r.requiredLiquidUL)}${c.form === "pure-liquid" || c.form === "solution" ? `<span class="observation-kind">Density (g/mL)</span>${compact(input(`${p}.density`, "Density (g/mL)"))}` : ""}</td><td>${observationInput(c, i, r)}</td><td>${method === "direct" ? `${fmt(r.massErrorPercent, true)}${r.massErrorBasis === "Calculated from observed volume" ? '<span class="observation-kind">From observed volume</span>' : ""}` : "\u2014"}</td><td>${compact(
         select(`${p}.form`, "Physical Form", [
           ["", "Physical form"],
           ["solid", "Solid"],
@@ -2870,7 +3139,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
   }
   function buffer() {
     const b = editor().inputs, r = results();
-    return title() + `<section class="panel"><div class="panel-heading"><h2>Preparation Information</h2>${badge("Final volume basis", "teal")}</div><div class="panel-body"><div class="grid three">${input("name", "Preparation Name")}${input("preparationLot", "Preparation Lot")}${input("preparationDate", "Date", "", "date")}${quantity("volume", "Target Volume", "volumeUnit", units.volume)}${input("targetPH", "Target pH (optional)")}</div><p class="help">Final volume includes all stocks and liquid additions. Bring to the specified final volume after adding all components.</p></div></section>` + inventoryPanel() + componentTable(b, r) + review(r);
+    return title() + `<section class="panel"><div class="panel-heading"><h2>Preparation Information</h2>${badge("Final volume basis", "teal")}</div><div class="panel-body"><div class="grid three">${input("name", "Preparation Name")}${input("preparationLot", "Preparation Lot")}${input("preparationDate", "Preparation Date", "", "date")}${quantity("volume", "Target Volume", "volumeUnit", units.volume)}${input("targetPH", "Target pH (optional)")}</div><p class="help">Final volume includes all stocks and liquid additions. Bring to the specified final volume after adding all components.</p></div></section>` + inventoryPanel() + componentTable(b, r) + review(r);
   }
   function stockCard(c, i, role) {
     const s = c.stocks[role], p = `cocktails.${i}.stocks.${role}`, r = calculateSingle(s);
@@ -2939,6 +3208,29 @@ Only the selected observation basis is used; displayed values are rounded, recor
     const active = document.activeElement, focus = active?.id, start = active?.selectionStart, end = active?.selectionEnd;
     const opened = editor()?.snapshot, stale = opened && opened.ruleVersion !== RULE_VERSION;
     app.innerHTML = header() + `<main class="shell" id="main"><div class="breadcrumb"><a href="#home">Workbench</a> &nbsp;/&nbsp; ${escape({ home: "Overview", buffer: "Buffer Making", sis: "S/IS Making", records: "Records" }[route] || "Overview")}</div><div class="workspace">${storageError ? messages([storageError]) : ""}${notice ? `<div class="notice">${escape(notice)}</div>` : ""}${stale ? `<h1>${escape(opened.name)}</h1><div class="notice warning">This record uses rules ${escape(opened.ruleVersion)}. Saved results are preserved as a read-only snapshot. Recalculate explicitly to edit under current rules ${RULE_VERSION}.</div>${button("recalculate", "Recalculate with current rules", "primary")}${button("export-excel", "Export Preparation Excel")}<pre>${escape(JSON.stringify(opened, null, 2))}</pre>` : route === "home" ? home() : route === "buffer" ? buffer() : route === "sis" ? sis() : recordsPage()}</div><footer class="footer"><span>Lab Preparation Workbench \xB7 Browser local storage \xB7 Export preparation Excel files</span><span>Explicit units. Traceable calculations. &nbsp; Rules ${RULE_VERSION}</span></footer><dialog id="detail-dialog"><h2 id="detail-title"></h2><textarea id="detail-content" readonly aria-label="Full content"></textarea><div class="actions">${button("copy-detail", "Copy full content")}${button("close-detail", "Close")}</div></dialog></main>`;
+    for (const table of app.querySelectorAll("table")) {
+      const labels = [...table.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+      for (const row of table.querySelectorAll("tbody tr:not(.component-details)")) {
+        [...row.children].forEach((cell, i) => {
+          cell.dataset.label = labels[i] || "";
+        });
+        if (!table.matches(".component-grid,.inventory-results")) {
+          const name = row.firstElementChild?.querySelector("strong");
+          if (name) {
+            const full = name.textContent, button2 = document.createElement("button"), text = document.createElement("span");
+            button2.type = "button";
+            button2.className = "cell-peek";
+            button2.dataset.action = "full-cell";
+            button2.dataset.value = full;
+            button2.title = full;
+            text.className = "two-line";
+            text.textContent = full;
+            button2.append(text);
+            name.replaceWith(button2);
+          }
+        }
+      }
+    }
     for (const p of scrolls) {
       const n = document.getElementById(p.id);
       if (n) {
@@ -3095,6 +3387,18 @@ Observed mass is not required to calculate Target Mass.`
       }
       if (action === "inventory-cell") {
         showDetail(b.dataset.header, inventoryValue(inventory.rows[Number(b.dataset.index)], inventory.mapping, b.dataset.key));
+        return;
+      }
+      if (action === "component-name" || action === "snapshot-field") {
+        const component = editor().inputs.components[Number(b.dataset.index)];
+        showDetail(
+          action === "component-name" ? "Chemical Name" : b.dataset.key,
+          action === "component-name" ? component.name : component.inventory[b.dataset.key]
+        );
+        return;
+      }
+      if (action === "full-cell") {
+        showDetail("Full name", b.dataset.value);
         return;
       }
       if (action === "inventory-import-issues") {

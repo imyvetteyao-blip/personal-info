@@ -1,4 +1,6 @@
 import { writeBufferPreparation } from "./excel-buffer.mjs";
+import { calendarDateInfo } from "./calendar-date.mjs";
+import { bufferPresentationResults } from "./buffer-view.mjs";
 import { RULE_VERSION, massMg, volumeUL, calculateSingle } from "./calculations.mjs";
 import { isMeaningful, supplierFields, componentMapping } from "./inventory-config.mjs";
 import { excelResultFormat } from "./format.mjs";
@@ -177,6 +179,7 @@ export function bufferRows(record) {
   });
 }
 export async function createPreparationWorkbook(record, Excel = globalThis.ExcelJS) {
+  if (record.kind === "buffer") record = { ...record, results: bufferPresentationResults(record.results) };
   if (!Excel?.Workbook) throw new Error("Excel export is unavailable. Reload the workbench.");
   const wb = new Excel.Workbook();
   wb.creator = "Lab Preparation Workbench";
@@ -199,6 +202,7 @@ export async function createPreparationWorkbook(record, Excel = globalThis.Excel
           name: s.name,
           lot: s.lot,
           date: s.date,
+          dayOfYear: calendarDateInfo(s.date)?.label ?? null,
           solvent: s.solvent,
           mw: numeric(s.mw),
           source: s.source,
@@ -233,6 +237,7 @@ export async function createPreparationWorkbook(record, Excel = globalThis.Excel
         col("name", "Compound", 36),
         col("lot", "Lot", 22),
         col("date", "Preparation Date", 20),
+        col("dayOfYear", "Day of Year", 22),
         col("solvent", "Solvent", 28),
         col("mw", "MW (g/mol)", 18),
         col("source", "Stock Data Source", 24),

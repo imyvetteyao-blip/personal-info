@@ -1,6 +1,7 @@
 import { massMg, volumeUL, concentrationMM } from "./calculations.mjs";
 import { vendorDescription } from "./inventory-view.mjs";
 import { formatResult, excelResultFormat } from "./format.mjs";
+import { calendarDateInfo } from "./calendar-date.mjs";
 const number = (v) => (v == null || String(v).trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 const positive = (v) => (number(v) > 0 ? number(v) : null);
 const converted = (v, u, fn) => {
@@ -50,7 +51,7 @@ export function bufferSectionRows(record) {
         r.requiredMg ?? null,
         r.requiredLiquidUL ?? null,
         observation(c, r),
-        method === "direct" ? (r.massErrorPercent ?? null) : method === "new" ? (r.stockMassErrorPercent ?? null) : null,
+        method === "direct" ? (r.massErrorPercent ?? null) : null,
       ],
     });
     if (method === "new" || method === "existing") {
@@ -108,6 +109,7 @@ export function writeBufferPreparation(wb, record, status) {
     ["Volume Basis", "Final volume includes all stocks and liquids; bring to the final volume."],
     ["Target pH", number(record.inputs.targetPH)],
     ["Record Status", status],
+    ["Day of Year", calendarDateInfo(record.inputs.preparationDate)?.dayOfYear ?? null],
   ];
   information.forEach(([label, value], i) => {
     const row = i + 4;
@@ -118,6 +120,8 @@ export function writeBufferPreparation(wb, record, status) {
     ws.getCell(row, 2).alignment = { wrapText: true, vertical: "middle" };
     ws.getRow(row).height = i === 5 ? 29 : 21;
   });
+  const dateInfo = calendarDateInfo(record.inputs.preparationDate);
+  if (dateInfo) ws.getCell("B12").numFmt = `"Day "0" of ${dateInfo.year}"`;
   ws.getCell("A1").note = `Record ID: ${record.id}\nRule version: ${record.ruleVersion}\n${record.demo ? "Demo data" : "User preparation"}`;
   const compHeader = 14;
   section(compHeader - 1, "B. Components");
@@ -186,7 +190,7 @@ export function writeBufferPreparation(wb, record, status) {
   );
   if (rows.stocks.length)
     note(
-      "Stock weighing observations and Error values refer only to stock preparation. Stock weighing Error is shown only for an explicit Stock Target Mass; it is not final buffer concentration error. Existing-stock mass observations and Error remain blank.",
+      "Stock weighing observations refer to stock preparation; stock Error is left blank. Stock concentration and transfer use the actual stock preparation inputs. Existing-stock mass observations remain blank.",
     );
   cursor++;
   section(cursor++, "C. Stock Solutions");
@@ -210,13 +214,6 @@ export function writeBufferPreparation(wb, record, status) {
     cursor += rows.stocks.length + 2;
   } else {
     note("No stock solutions used.");
-  }
-  for (const c of record.inputs.components) {
-    const r = record.results.rows?.find((x) => x.id === c.id);
-    if (r?.method === "new" && r.stockTargetMassMg != null)
-      note(
-        `${c.name}: stock weighing Error uses an explicit stock target mass of ${formatResult(r.stockTargetMassMg)} mg. The actual stock concentration and transfer use the observed mass, not the target mass.`,
-      );
   }
   if (
     record.inputs.components.some(

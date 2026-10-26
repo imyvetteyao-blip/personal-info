@@ -9,6 +9,7 @@ test("built-in inventory ignores old uploaded cache, preserves search order and 
   await page.locator("#inventory-query").fill("DEMO-001");
   const headers = await page.locator(".inventory-results th").allTextContents();
   expect(headers).toEqual([
+    "Add Component",
     "Chemical Name",
     "Location",
     "Amount",
@@ -20,7 +21,6 @@ test("built-in inventory ignores old uploaded cache, preserves search order and 
     "State",
     "Grade",
     "Temperature",
-    "Action",
   ]);
   await expect(page.locator(".inventory-results")).toContainText("500 mL");
   await expect(page.locator(".inventory-results")).toContainText("Shelf / A1");
@@ -95,19 +95,20 @@ test("main and expanded editing update together without focus or scroll loss", a
   await expect(detailField(page, "components.0.reviewed")).not.toBeChecked();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
-test("stock details are collapsed by default and stock weighing error needs its own target", async ({ page }) => {
+test("stock details omit optional target/error controls and still calculate from actual preparation", async ({ page }) => {
   await mockInventory(page);
   await setupBuffer(page);
   await field(page, "components.0.form").selectOption("solid");
   await field(page, "components.0.target").fill(".097992265");
-  await field(page, "components.0.actualMass").fill("101");
-  await expect(row(page).locator("td").nth(7)).toContainText("target not set");
+  await expect(page.locator(".component-details")).toHaveCount(0);
   await row(page).getByRole("button", { name: "Details", exact: true }).click();
+  await detailField(page, "components.0.actualMass").fill("100");
   await detailField(page, "components.0.stockVolume").fill("10");
-  await detailField(page, "components.0.stockTargetMass").fill("100");
-  await expect(row(page).locator("td").nth(7)).toContainText("+1.00");
-  await expect(row(page).locator("td").nth(7)).toContainText("Stock weighing");
-  await expect(page.locator(".component-details")).toContainText("not a final buffer concentration error");
+  await expect(row(page).locator("td").nth(7)).toHaveText("—");
+  await expect(page.locator('[data-path*="stockTargetMass"]')).toHaveCount(0);
+  await expect(page.locator(".component-details")).not.toContainText("Stock Weighing Error");
+  await expect(page.locator(".component-details")).toContainText("979.92");
+  await expect(detailField(page, "components.0.reviewed")).toBeEnabled();
 });
 test("published inventory refresh updates new searches but not saved or selected snapshots", async ({ page }) => {
   const state = { current: publishedInventory() };
@@ -170,12 +171,12 @@ test("section Excel, observations, preparation fields and saved/reopened records
   expect(s.getCell("H15").value).toContain("mass calculated from density");
   expect(s.getCell("A15").note).toContain("1111111111111111");
 });
-test("narrow buffer uses contained scrolling and compact rows", async ({ page }) => {
+test("narrow buffer uses adaptive rows without horizontal scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockInventory(page);
   await setupBuffer(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   await expect(page.locator(".component-details")).toHaveCount(0);
-  expect(await page.locator(".component-grid-scroll").evaluate((e) => e.scrollWidth > e.clientWidth)).toBeTruthy();
-  expect(await row(page).evaluate((e) => e.getBoundingClientRect().height)).toBeLessThan(180);
+  expect(await page.locator(".component-grid-scroll").evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBeTruthy();
+  expect(await row(page).evaluate((e) => e.getBoundingClientRect().height)).toBeLessThan(650);
 });

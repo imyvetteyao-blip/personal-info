@@ -349,19 +349,6 @@ export function calculateBufferComponent(c, volume, unit) {
             r.stockMassBasis = "Measured mass";
             if (c.form === "pure-liquid" && density) r.stockCalculatedVolumeUL = finite(r.stockActualMassMg / density);
           }
-          if (supplied(c.stockTargetMass)) {
-            try {
-              r.stockTargetMassMg = namedMass(c.stockTargetMass, c.stockTargetMassUnit || "mg", "Stock target mass");
-              const deviation = massError(r.stockActualMassMg, r.stockTargetMassMg);
-              r.stockMassDeviationMg = deviation.deviationMg;
-              r.stockMassErrorPercent = deviation.errorPercent;
-              formulas.push(
-                `Stock weighing error (%) = (${r.stockActualMassMg} - ${r.stockTargetMassMg}) / ${r.stockTargetMassMg} × 100 = ${r.stockMassErrorPercent}; this is not a buffer concentration error.`,
-              );
-            } catch (e) {
-              errors.push(e.message);
-            }
-          }
           r.stockFinalVolumeUL = namedVolume(c.stockVolume, c.stockVolumeUnit, "Stock final solution volume");
           r.stockMM = stockFromWeight(r.stockActualMassMg, mw, r.stockFinalVolumeUL);
           availableUL = r.stockFinalVolumeUL;

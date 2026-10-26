@@ -180,15 +180,15 @@ test("search field order is fixed, amounts/locations merge, summary fields are h
     ["Chemical Name", "CAS", "Barcode", "Location", "Sub-location", "Amount", "Units", "Temperature", "Note", "Count"],
   );
 });
-test("stock weighing error is calculated only from explicit stock target mass, never buffer target mass", () => {
+test("retired stock target inputs never affect concentration or block validation", () => {
   const c = component({ method: "new", target: ".1", actualMass: "101", stockVolume: "10" });
-  const no = calculateBufferComponent(c, 1000, "mL");
-  assert.equal(no.stockMassErrorPercent, null);
-  assert.equal(no.massErrorPercent, null);
-  const yes = calculateBufferComponent({ ...c, stockTargetMass: ".1", stockTargetMassUnit: "g" }, 1000, "mL");
-  assert.ok(Math.abs(yes.stockMassErrorPercent - 1) < 1e-12);
-  assert.equal(yes.stockMM, 101);
-  assert.notEqual(yes.stockTargetMassMg, yes.requiredMg);
+  for (const target of ["", ".1", "invalid", "0"]) {
+    const r = calculateBufferComponent({ ...c, stockTargetMass: target, stockTargetMassUnit: "invalid" }, 1000, "mL");
+    assert.equal(r.stockMassErrorPercent, null);
+    assert.equal(r.massErrorPercent, null);
+    assert.equal(r.stockMM, 101);
+    assert.deepEqual(r.errors, []);
+  }
 });
 test("Excel uses A/B/C sections on one sheet, nine component columns and per-stock volumes/amounts", async () => {
   const cs = [
@@ -222,7 +222,7 @@ test("Excel uses A/B/C sections on one sheet, nine component columns and per-sto
   assert.match(s.getCell("B15").value, /TCI, ID A2485, Lot RPJCH-OR, Barcode 0000123/);
   assert.equal(s.getCell("I15").value, 1);
   assert.match(s.getCell("H16").value, /Stock weighing/);
-  assert.equal(s.getCell("I16").value, 1);
+  assert.equal(s.getCell("I16").value, null);
   assert.equal(s.getCell("I17").value, null);
   assert.equal(s.getCell("H18").value, null);
   assert.equal(s.getCell("I18").value, null);

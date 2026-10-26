@@ -1,4 +1,5 @@
 import { RULE_VERSION, calculateBuffer, calculateSIS } from "./calculations.mjs";
+import { calendarDateInfo } from "./calendar-date.mjs";
 export const uid = () => globalThis.crypto.randomUUID();
 export function blankStock(role) {
   return {
@@ -46,7 +47,7 @@ export const blankBuffer = () => ({
   preparationDate: "",
   targetPH: "",
   volume: "",
-  volumeUnit: "µL",
+  volumeUnit: "mL",
   components: [],
   demo: false,
 });
@@ -68,8 +69,6 @@ export function componentFromRow(row, mapping, source, version = null, updatedAt
     inventorySource: source,
     inventoryVersion: version,
     inventoryUpdatedAt: updatedAt,
-    stockTargetMass: "",
-    stockTargetMassUnit: "mg",
     inventoryMapping: structuredClone(mapping),
     observationMethod: "volume",
     stockObservationMethod: "mass",
@@ -140,6 +139,13 @@ export function makeRecord(kind, inputs, status = "Draft", id = uid(), createdAt
     createdAt,
     updatedAt: new Date().toISOString(),
     inputs: structuredClone(inputs),
+    calendarDates: {
+      preparation: calendarDateInfo(inputs.preparationDate),
+      stocks:
+        kind === "sis"
+          ? inputs.cocktails.flatMap((c) => ["S", "IS"].map((role) => ({ cocktailId: c.id, role, ...calendarDateInfo(c.stocks[role].date) })))
+          : [],
+    },
     results: structuredClone(results),
   };
 }

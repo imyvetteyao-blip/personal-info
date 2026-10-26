@@ -38,7 +38,7 @@ test("S/IS A/B/C calculations, save/reopen, review invalidation and Excel remain
   await expect(page.getByRole("button", { name: "Confirm volume plan", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Mark Reviewed" })).toBeDisabled();
 });
-test("narrow S/IS still fits the page and scrolls its data tables", async ({ page }) => {
+test("narrow S/IS adapts its data tables to the page width", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("#sis");
   await page.getByRole("button", { name: "Load A / B / C demo" }).click();

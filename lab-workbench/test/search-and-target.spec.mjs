@@ -37,7 +37,7 @@ test("target mass calculates from µL preparation volume before observations and
   await mockInventory(page, { current: publishedInventory({ name }) });
   await page.goto("#buffer");
   await page.locator("#inventory-query").waitFor();
-  await expect(field(page, "volumeUnit")).toHaveValue("µL");
+  await expect(field(page, "volumeUnit")).toHaveValue("mL");
   await addComponent(page);
   await field(page, "components.0.form").selectOption("solid");
   await field(page, "components.0.mw").fill("555.7");
