@@ -4,6 +4,9 @@ const close = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a -
 export function editableStockNumber(stock, field) {
   const value = stock[field];
   if (value == null || String(value).trim() === "") return "";
+  const nativeUnit = field === "prepVolume" ? "µL" : "mmol/L";
+  const unit = field === "prepVolume" ? stock.prepUnit : stock.desiredUnit;
+  if (unit === nativeUnit) return String(value); // Preserve decimal points, trailing zeros and in-progress edits.
   try {
     return String(field === "prepVolume" ? volumeUL(value, stock.prepUnit) : concentrationMM(value, stock.desiredUnit));
   } catch {

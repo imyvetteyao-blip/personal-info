@@ -78,6 +78,19 @@ test("mode switches retain raw precision and do not duplicate fields or update c
   await expect(field(page, path("S", "target"))).toHaveValue("100");
   await expect(control(page, "S", "concentration")).toHaveCount(1);
 });
+test("typing decimal stock inputs preserves every character and trailing zero through mode switches", async ({ page }) => {
+  await savedCocktail(page);
+  await control(page, "S", "volume").fill("");
+  await control(page, "S", "volume").pressSequentially("1789.1234567890100");
+  await expect(control(page, "S", "volume")).toHaveValue("1789.1234567890100");
+  await field(page, path("S", "volumeMode")).selectOption("target");
+  await control(page, "S", "concentration").fill("");
+  await control(page, "S", "concentration").pressSequentially("1.2300");
+  await expect(control(page, "S", "concentration")).toHaveValue("1.2300");
+  await field(page, path("S", "volumeMode")).selectOption("manual");
+  await field(page, path("S", "volumeMode")).selectOption("target");
+  await expect(control(page, "S", "concentration")).toHaveValue("1.2300");
+});
 test("already sufficient IS aliquots hide coordination and allow reviewed export without redundant confirmation", async ({ page }) => {
   await savedCocktail(page, true);
   await expect(page.locator(".plan-table")).toHaveCount(0);

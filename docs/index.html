@@ -2662,6 +2662,9 @@ Only the selected observation basis is used; displayed values are rounded, recor
   function editableStockNumber(stock, field) {
     const value = stock[field];
     if (value == null || String(value).trim() === "") return "";
+    const nativeUnit = field === "prepVolume" ? "\xB5L" : "mmol/L";
+    const unit = field === "prepVolume" ? stock.prepUnit : stock.desiredUnit;
+    if (unit === nativeUnit) return String(value);
     try {
       return String(field === "prepVolume" ? volumeUL(value, stock.prepUnit) : concentrationMM(value, stock.desiredUnit));
     } catch {

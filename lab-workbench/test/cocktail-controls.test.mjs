@@ -72,6 +72,16 @@ test("only the active input direction is validated and legacy units convert to f
   const tiny = switchStockMode(stock({ source: "qnmr-amount", amount: ".000001", prepVolume: "1000" }), "target");
   assert.equal(Number(tiny.desiredConcentration), 0.000001);
 });
+test("editable stock values preserve decimal text, trailing zeros and exponent input across mode switches", () => {
+  for (const value of ["1.", "1.2300", "1789.1234567890100", "1e", "1e3"]) {
+    assert.equal(editableStockNumber(stock({ prepVolume: value }), "prepVolume"), value);
+    assert.equal(editableStockNumber(stock({ desiredConcentration: value }), "desiredConcentration"), value);
+  }
+  const manual = stock({ prepVolume: "1789.1234567890100" });
+  assert.equal(switchStockMode(switchStockMode(manual, "target"), "manual").prepVolume, manual.prepVolume);
+  const target = stock({ volumeMode: "target", desiredConcentration: "1.2300" });
+  assert.equal(switchStockMode(switchStockMode(target, "manual"), "target").desiredConcentration, "1.2300");
+});
 test("mixed independent stock methods feed transfer, solvent and per-assay results without unnecessary coordination", async () => {
   const inputs = mixed(),
     r = calculateSIS(inputs);
