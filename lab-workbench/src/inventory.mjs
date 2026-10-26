@@ -3,10 +3,13 @@ export function parseCSV(text) {
   const input = text.replace(/^\uFEFF/, "");
   const firstLine = input.split(/\r?\n/)[0];
   const delimiter = firstLine.includes("\t") ? "\t" : firstLine.includes(";") && !firstLine.includes(",") ? ";" : ",";
-  const rows = [];
+  const rows = [],
+    sourceRowNumbers = [];
   let row = [],
     field = "",
-    quoted = false;
+    quoted = false,
+    line = 1,
+    recordLine = 1;
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
     if (ch === '"') {
@@ -22,16 +25,24 @@ export function parseCSV(text) {
       if (ch === "\r" && input[i + 1] === "\n") i++;
       row.push(field);
       rows.push(row);
+      sourceRowNumbers.push(recordLine);
       row = [];
       field = "";
-    } else field += ch;
+      recordLine = ++line;
+    } else {
+      field += ch;
+      if (ch === "\n" || (ch === "\r" && input[i + 1] !== "\n")) line++;
+    }
   }
   if (quoted) throw new Error("Unclosed quoted CSV field.");
   if (field !== "" || row.length) {
     row.push(field);
     rows.push(row);
+    sourceRowNumbers.push(recordLine);
   }
-  return rows.filter((r) => r.some((c) => String(c).trim()));
+  // Preserve source line numbers, including blank lines and quoted newlines.
+  Object.defineProperty(rows, "sourceRowNumbers", { value: sourceRowNumbers });
+  return rows;
 }
 export function tableFromRows(rows, headerRow = 1) {
   if (!Number.isInteger(headerRow) || headerRow < 1 || headerRow > rows.length) throw new Error("Choose a valid header row.");
@@ -45,12 +56,18 @@ export function tableFromRows(rows, headerRow = 1) {
     seen.set(raw, n);
     return n === 1 ? raw : `${raw} (${n})`;
   });
+  const entries = rows
+    .slice(headerRow)
+    .map((r, i) => ({
+      values: r,
+      number: rows.sourceRowNumbers?.[headerRow + i] ?? headerRow + i + 1,
+    }))
+    .filter(({ values }) => values.some((v) => v != null && (typeof v !== "string" || v.trim() !== "")));
   return {
     headers,
-    rows: rows
-      .slice(headerRow)
-      .filter((r) => r.some((v) => v !== "" && v != null))
-      .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""]))),
+    rows: entries.map(({ values }) => Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""]))),
+    rowNumbers: entries.map(({ number }) => number),
+    blankRowCount: rows.length - headerRow - entries.length,
   };
 }
 export async function readInventoryFile(file, config = INVENTORY_CONFIG, Excel = globalThis.ExcelJS) {
@@ -169,29 +186,46 @@ export function matchingRows(rows, mapping, query) {
   );
 }
 
-export function validateInventoryTable(table, config = INVENTORY_CONFIG, classification = "local") {
-  if (!table.rows.length) throw new Error("Inventory has no records. An empty inventory cannot be used.");
-  const seen = new Set();
+export function inspectInventoryTable(table, config = INVENTORY_CONFIG, classification = "local") {
+  const barcodeCounts = new Map(),
+    issues = [],
+    validIndexes = [];
+  for (const row of table.rows) {
+    const value = row[table.mapping.barcode];
+    if (isMeaningful(value)) {
+      const barcode = String(value);
+      barcodeCounts.set(barcode, (barcodeCounts.get(barcode) || 0) + 1);
+    }
+  }
   table.rows.forEach((row, i) => {
-    const label = `Inventory row ${i + config.headerRow + 1}`;
-    if (typeof row[table.mapping.name] !== "string" || !row[table.mapping.name].trim())
-      throw new Error(`${label}: Chemical Name must be nonempty text.`);
-    for (const key of ["name", "barcode"])
-      if (!isMeaningful(row[table.mapping[key]])) throw new Error(`${label}: ${config.fields[key].label} must not be empty.`);
+    const problems = [],
+      name = row[table.mapping.name];
+    if (typeof name !== "string" || !isMeaningful(name))
+      problems.push(`Chemical Name must be nonempty text (${!isMeaningful(name) ? "missing value" : `found ${typeof name}`}).`);
+    if (!isMeaningful(row[table.mapping.barcode])) problems.push("Barcode must not be empty.");
     if (classification === "demo" && !String(row[table.mapping.barcode]).startsWith("DEMO-"))
-      throw new Error(`${label}: Demo releases require DEMO- barcodes; private/company inventory cannot be labeled Demo.`);
+      problems.push("Demo releases require DEMO- barcodes; private/company inventory cannot be labeled Demo.");
     const barcode = String(row[table.mapping.barcode]);
-    if (seen.has(barcode)) throw new Error(`${label}: duplicate Barcode ${barcode}.`);
-    seen.add(barcode);
+    // Exclude every conflicting row rather than arbitrarily choosing a supplier/Lot.
+    if (barcodeCounts.get(barcode) > 1) problems.push(`duplicate Barcode ${barcode}. All rows sharing this barcode are excluded.`);
     for (const key of ["mw", "density"]) {
       const h = table.mapping[key],
         v = row[h];
       if (h && isMeaningful(v) && (!Number.isFinite(Number(v)) || Number(v) <= 0))
-        throw new Error(`${label}: ${config.fields[key].label} must be a positive number or blank.`);
+        problems.push(`${config.fields[key].label} must be a positive number or blank.`);
     }
     for (const [key, v] of Object.entries(row))
       if (v != null && (!["string", "number", "boolean"].includes(typeof v) || (typeof v === "number" && !Number.isFinite(v))))
-        throw new Error(`${label}: invalid value type in ${key}.`);
+        problems.push(`Invalid value type in ${key}.`);
+    if (problems.length) issues.push({ row: table.rowNumbers?.[i] ?? i + config.headerRow + 1, problems });
+    else validIndexes.push(i);
   });
+  return { issues, validIndexes };
+}
+
+export function validateInventoryTable(table, config = INVENTORY_CONFIG, classification = "local") {
+  if (!table.rows.length) throw new Error("Inventory has no records. An empty inventory cannot be used.");
+  const { issues } = inspectInventoryTable(table, config, classification);
+  if (issues.length) throw new Error(`Inventory row ${issues[0].row}: ${issues[0].problems.join(" ")}`);
   return table;
 }

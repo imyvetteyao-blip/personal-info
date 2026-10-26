@@ -6,6 +6,8 @@ The UI names the **Current Search Source**, file name and row count. An explicit
 
 The local reader contains no network or persistence code. Browser tests verify that selecting and searching a local file emits no network requests, and that only selected component snapshots are saved by Save Preparation Record. This local workflow does not make the public site private or enable confidential server-side inventory hosting.
 
+For local files, record validation reports all invalid rows and imports the valid subset. A persistent **Partial inventory import** notice shows imported/excluded counts and original worksheet row numbers or CSV line starts; **View excluded rows** opens the complete, copyable report. Fully blank rows are ignored. Missing/non-text names, missing barcodes, invalid numeric values and every row sharing a duplicate barcode are excluded; source values are never filled in or changed. Correct the source and reselect it to include excluded records. If headers/encoding are invalid or no usable records remain, the file is rejected explicitly and the previous search source remains selected. Developer conversion/publication remains strict: any invalid record stops the build.
+
 ## Public Demo update: replace → validate/build → publish
 
 1. Replace `inventory/demo.csv` with the updated Demo dataset, preserving the fixed header contract and `DEMO-` barcodes. CSV is supported; developer conversion also supports XLSX/TSV.

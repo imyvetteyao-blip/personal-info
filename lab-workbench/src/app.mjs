@@ -18,7 +18,7 @@ import { matchingRows } from "./inventory.mjs";
 import { isMeaningful } from "./inventory-config.mjs";
 import { INVENTORY_COLUMNS, inventoryValue, summaryEntries, vendorDescription } from "./inventory-view.mjs";
 import { loadBuiltinInventory } from "./builtin-inventory.mjs";
-import { readLocalInventory } from "./local-inventory.mjs";
+import { readLocalInventory, localInventoryReportText } from "./local-inventory.mjs";
 import { formatResult } from "./format.mjs";
 import { createPreparationWorkbook } from "./excel.mjs";
 
@@ -148,6 +148,17 @@ function title() {
 function inventorySourceControls() {
   return `<div class="inventory-source-controls"><label class="field">Choose Local Inventory (CSV / XLSX)<input class="file-input" id="local-inventory-file" type="file" accept=".csv,.tsv,.xlsx"></label>${inventory?.sourceType === "local" ? button("reload-inventory", "Use Published Demo Inventory") : ""}</div><p class="help">Local files are read only in this browser, not uploaded to a server or GitHub. The full inventory stays in memory; select it again after a refresh. Saved component snapshots remain in this browser.</p>`;
 }
+function inventoryImportNotice() {
+  const report = inventory?.importReport;
+  if (!report) return "";
+  if (!report.excludedRows) return `<p class="help" role="status">${report.importedRows} records imported successfully.</p>`;
+  return `<div class="notice warning inventory-import-notice" role="status"><strong>Partial inventory import: ${report.importedRows} of ${report.totalRows} records imported; ${report.excludedRows} ${report.excludedRows === 1 ? "row" : "rows"} excluded.</strong><p>Valid entries are ready to search. Excluded rows are unavailable for search. Correct the source file and select it again to include them. No names or values were invented.</p><ul>${report.issues
+    .slice(0, 5)
+    .map((issue) => `<li>Row ${issue.row}: ${escape(issue.problems.join(" "))}</li>`)
+    .join(
+      "",
+    )}</ul>${button("inventory-import-issues", "View excluded rows", "small")}<p class="help">Original worksheet rows or CSV line starts are shown. Blank rows are ignored.</p></div>`;
+}
 async function refreshBuiltinInventory() {
   const request = ++inventoryRequest;
   inventoryLoading = true;
@@ -195,7 +206,7 @@ function inventoryPanel() {
     return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${inventorySourceControls()}${messages([inventoryError || "Inventory is unavailable."])}${button("reload-inventory", "Retry loading")}</div></section>`;
   const matches = matchingRows(inventory.rows, inventory.mapping, query),
     width = INVENTORY_COLUMNS.reduce((n, c) => n + c.width, 0) + 140;
-  return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC · ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file — ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> — Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory…" autocomplete="off"></label>${
+  return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC · ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file — ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventoryImportNotice()}${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> — Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory…" autocomplete="off"></label>${
     query
       ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " · Showing the first 30; refine your search." : ""} · Click a cell to view and copy its full contents.</p>${
           matches.length
@@ -313,7 +324,7 @@ function observationInput(c, i, r) {
   return compact(quantity(`${p}.actualMass`, "Observed Mass", `${p}.massUnit`, ["mg", "g"]));
 }
 function componentTable(b, results) {
-  if (!b.components.length) return '<div class="empty">No components yet. Search the built-in inventory and select Add Component.</div>';
+  if (!b.components.length) return '<div class="empty">No components yet. Search the current inventory and select Add Component.</div>';
   return `<section class="panel"><div class="panel-heading"><h2>Components</h2><span class="help">One component per row. Expand Details for stock preparation, snapshots, formulas and review.</span></div><div class="component-grid-scroll" id="component-table-scroll" data-preserve-scroll><table class="component-grid"><colgroup>${[225, 190, 95, 185, 120, 150, 215, 120, 175, 100].map((w) => `<col style="width:${w}px">`).join("")}</colgroup><thead><tr>${["Chemical Name", "Vendor", "MW (g/mol)", "Target Concentration", "Target Mass (mg)", "Target Liquid Volume (µL)", "Observation", "Error (%)", "Preparation Method", "Review"].map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>${b.components
     .map((c, i) => {
       const r = results.rows?.[i] || {},
@@ -584,6 +595,10 @@ app.addEventListener("click", async (event) => {
     }
     if (action === "inventory-cell") {
       showDetail(b.dataset.header, inventoryValue(inventory.rows[Number(b.dataset.index)], inventory.mapping, b.dataset.key));
+      return;
+    }
+    if (action === "inventory-import-issues") {
+      showDetail("Local inventory import report", localInventoryReportText(inventory));
       return;
     }
     if (action === "inventory-header") {

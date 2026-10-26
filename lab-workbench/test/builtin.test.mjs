@@ -68,6 +68,7 @@ test("empty, missing-header, duplicate, malformed records and mislabeled private
       ["Name,ID\nSalt,123", /Missing required column: CAS/],
       [csv() + "\nGlycine,56-40-6,DEMO-001,100", /duplicate Barcode/],
       [csv().replace("DEMO-001", ""), /Barcode must not be empty/],
+      [csv().replace("Glycine,", ","), /Chemical Name must be nonempty text/],
       [csv().replace(",100,", ",bad,"), /Molecular Weight/],
     ]) {
       await writeFile(f, text);

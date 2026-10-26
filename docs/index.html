@@ -1817,8 +1817,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const input2 = text.replace(/^\uFEFF/, "");
     const firstLine = input2.split(/\r?\n/)[0];
     const delimiter = firstLine.includes("	") ? "	" : firstLine.includes(";") && !firstLine.includes(",") ? ";" : ",";
-    const rows = [];
-    let row = [], field = "", quoted = false;
+    const rows = [], sourceRowNumbers = [];
+    let row = [], field = "", quoted = false, line = 1, recordLine = 1;
     for (let i = 0; i < input2.length; i++) {
       const ch = input2[i];
       if (ch === '"') {
@@ -1834,16 +1834,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (ch === "\r" && input2[i + 1] === "\n") i++;
         row.push(field);
         rows.push(row);
+        sourceRowNumbers.push(recordLine);
         row = [];
         field = "";
-      } else field += ch;
+        recordLine = ++line;
+      } else {
+        field += ch;
+        if (ch === "\n" || ch === "\r" && input2[i + 1] !== "\n") line++;
+      }
     }
     if (quoted) throw new Error("Unclosed quoted CSV field.");
     if (field !== "" || row.length) {
       row.push(field);
       rows.push(row);
+      sourceRowNumbers.push(recordLine);
     }
-    return rows.filter((r) => r.some((c) => String(c).trim()));
+    Object.defineProperty(rows, "sourceRowNumbers", { value: sourceRowNumbers });
+    return rows;
   }
   function tableFromRows(rows, headerRow = 1) {
     if (!Number.isInteger(headerRow) || headerRow < 1 || headerRow > rows.length) throw new Error("Choose a valid header row.");
@@ -1856,9 +1863,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       seen.set(raw, n);
       return n === 1 ? raw : `${raw} (${n})`;
     });
+    const entries = rows.slice(headerRow).map((r, i) => ({
+      values: r,
+      number: rows.sourceRowNumbers?.[headerRow + i] ?? headerRow + i + 1
+    })).filter(({ values }) => values.some((v) => v != null && (typeof v !== "string" || v.trim() !== "")));
     return {
       headers,
-      rows: rows.slice(headerRow).filter((r) => r.some((v) => v !== "" && v != null)).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])))
+      rows: entries.map(({ values }) => Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""]))),
+      rowNumbers: entries.map(({ number: number2 }) => number2),
+      blankRowCount: rows.length - headerRow - entries.length
     };
   }
   async function readInventoryFile(file, config = INVENTORY_CONFIG, Excel = globalThis.ExcelJS) {
@@ -1957,30 +1970,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       )
     );
   }
-  function validateInventoryTable(table, config = INVENTORY_CONFIG, classification = "local") {
-    if (!table.rows.length) throw new Error("Inventory has no records. An empty inventory cannot be used.");
-    const seen = /* @__PURE__ */ new Set();
+  function inspectInventoryTable(table, config = INVENTORY_CONFIG, classification = "local") {
+    const barcodeCounts = /* @__PURE__ */ new Map(), issues = [], validIndexes = [];
+    for (const row of table.rows) {
+      const value = row[table.mapping.barcode];
+      if (isMeaningful(value)) {
+        const barcode = String(value);
+        barcodeCounts.set(barcode, (barcodeCounts.get(barcode) || 0) + 1);
+      }
+    }
     table.rows.forEach((row, i) => {
-      const label = `Inventory row ${i + config.headerRow + 1}`;
-      if (typeof row[table.mapping.name] !== "string" || !row[table.mapping.name].trim())
-        throw new Error(`${label}: Chemical Name must be nonempty text.`);
-      for (const key of ["name", "barcode"])
-        if (!isMeaningful(row[table.mapping[key]])) throw new Error(`${label}: ${config.fields[key].label} must not be empty.`);
+      const problems = [], name = row[table.mapping.name];
+      if (typeof name !== "string" || !isMeaningful(name))
+        problems.push(`Chemical Name must be nonempty text (${!isMeaningful(name) ? "missing value" : `found ${typeof name}`}).`);
+      if (!isMeaningful(row[table.mapping.barcode])) problems.push("Barcode must not be empty.");
       if (classification === "demo" && !String(row[table.mapping.barcode]).startsWith("DEMO-"))
-        throw new Error(`${label}: Demo releases require DEMO- barcodes; private/company inventory cannot be labeled Demo.`);
+        problems.push("Demo releases require DEMO- barcodes; private/company inventory cannot be labeled Demo.");
       const barcode = String(row[table.mapping.barcode]);
-      if (seen.has(barcode)) throw new Error(`${label}: duplicate Barcode ${barcode}.`);
-      seen.add(barcode);
+      if (barcodeCounts.get(barcode) > 1) problems.push(`duplicate Barcode ${barcode}. All rows sharing this barcode are excluded.`);
       for (const key of ["mw", "density"]) {
         const h = table.mapping[key], v = row[h];
         if (h && isMeaningful(v) && (!Number.isFinite(Number(v)) || Number(v) <= 0))
-          throw new Error(`${label}: ${config.fields[key].label} must be a positive number or blank.`);
+          problems.push(`${config.fields[key].label} must be a positive number or blank.`);
       }
       for (const [key, v] of Object.entries(row))
         if (v != null && (!["string", "number", "boolean"].includes(typeof v) || typeof v === "number" && !Number.isFinite(v)))
-          throw new Error(`${label}: invalid value type in ${key}.`);
+          problems.push(`Invalid value type in ${key}.`);
+      if (problems.length) issues.push({ row: table.rowNumbers?.[i] ?? i + config.headerRow + 1, problems });
+      else validIndexes.push(i);
     });
-    return table;
+    return { issues, validIndexes };
   }
 
   // src/inventory-view.mjs
@@ -2064,10 +2083,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   async function readLocalInventory(file, config = INVENTORY_CONFIG, Excel = globalThis.ExcelJS) {
     if (file.size === 0) throw new Error("Local inventory file is empty.");
     const table = await importInventory(file, config, Excel);
-    validateInventoryTable(table, config, "local");
+    if (!table.rows.length) throw new Error("Inventory has no records. An empty inventory cannot be used.");
+    const { issues, validIndexes } = inspectInventoryTable(table, config, "local");
+    if (!validIndexes.length)
+      throw new Error(
+        `No usable inventory records. All ${table.rows.length} rows failed validation. ${issues.slice(0, 3).map((issue) => `Row ${issue.row}: ${issue.problems.join(" ")}`).join(" ")}`
+      );
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     const version = "local-" + Array.from(new Uint8Array(digest)).map((n) => n.toString(16).padStart(2, "0")).join("").slice(0, 16);
-    return { ...table, sourceType: "local", classification: "local", demo: false, version, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    return {
+      ...table,
+      rows: validIndexes.map((i) => table.rows[i]),
+      rowNumbers: validIndexes.map((i) => table.rowNumbers[i]),
+      importReport: { totalRows: table.rows.length, importedRows: validIndexes.length, excludedRows: issues.length, issues },
+      sourceType: "local",
+      classification: "local",
+      demo: false,
+      version,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  function localInventoryReportText(inventory2) {
+    const report = inventory2.importReport;
+    return [
+      `File: ${inventory2.source}`,
+      ...inventory2.worksheet ? [`Worksheet: ${inventory2.worksheet}`] : [],
+      `Imported ${report.importedRows} of ${report.totalRows} records; ${report.excludedRows} rows excluded.`,
+      "Row numbers refer to original worksheet rows or CSV line starts. Blank rows are ignored. Excluded rows are not available for search. No source values were modified.",
+      "",
+      ...report.issues.map((issue) => `Row ${issue.row}: ${issue.problems.join(" ")}`)
+    ].join("\n");
   }
 
   // src/format.mjs
@@ -2635,6 +2680,14 @@ Only the selected observation basis is used; displayed values are rounded, recor
   function inventorySourceControls() {
     return `<div class="inventory-source-controls"><label class="field">Choose Local Inventory (CSV / XLSX)<input class="file-input" id="local-inventory-file" type="file" accept=".csv,.tsv,.xlsx"></label>${inventory?.sourceType === "local" ? button("reload-inventory", "Use Published Demo Inventory") : ""}</div><p class="help">Local files are read only in this browser, not uploaded to a server or GitHub. The full inventory stays in memory; select it again after a refresh. Saved component snapshots remain in this browser.</p>`;
   }
+  function inventoryImportNotice() {
+    const report = inventory?.importReport;
+    if (!report) return "";
+    if (!report.excludedRows) return `<p class="help" role="status">${report.importedRows} records imported successfully.</p>`;
+    return `<div class="notice warning inventory-import-notice" role="status"><strong>Partial inventory import: ${report.importedRows} of ${report.totalRows} records imported; ${report.excludedRows} ${report.excludedRows === 1 ? "row" : "rows"} excluded.</strong><p>Valid entries are ready to search. Excluded rows are unavailable for search. Correct the source file and select it again to include them. No names or values were invented.</p><ul>${report.issues.slice(0, 5).map((issue) => `<li>Row ${issue.row}: ${escape(issue.problems.join(" "))}</li>`).join(
+      ""
+    )}</ul>${button("inventory-import-issues", "View excluded rows", "small")}<p class="help">Original worksheet rows or CSV line starts are shown. Blank rows are ignored.</p></div>`;
+  }
   async function refreshBuiltinInventory() {
     const request = ++inventoryRequest;
     inventoryLoading = true;
@@ -2681,7 +2734,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
     if (!inventory)
       return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${inventorySourceControls()}${messages([inventoryError || "Inventory is unavailable."])}${button("reload-inventory", "Retry loading")}</div></section>`;
     const matches = matchingRows(inventory.rows, inventory.mapping, query), width = INVENTORY_COLUMNS.reduce((n, c) => n + c.width, 0) + 140;
-    return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC \xB7 ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file \u2014 ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> \u2014 Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory\u2026" autocomplete="off"></label>${query ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " \xB7 Showing the first 30; refine your search." : ""} \xB7 Click a cell to view and copy its full contents.</p>${matches.length ? `<div class="table-wrap inventory-results-wrap" id="inventory-results-scroll" data-preserve-scroll><table class="inventory-results" style="width:${width}px"><colgroup>${INVENTORY_COLUMNS.map((c) => `<col style="width:${c.width}px">`).join("")}<col style="width:140px"></colgroup><thead><tr>${INVENTORY_COLUMNS.map((c) => `<th class="${c.identifier ? "identifier-column" : ""}"><span class="two-line">${c.label}</span></th>`).join("")}<th>Action</th></tr></thead><tbody>${matches.slice(0, 30).map(
+    return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC \xB7 ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file \u2014 ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventoryImportNotice()}${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> \u2014 Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory\u2026" autocomplete="off"></label>${query ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " \xB7 Showing the first 30; refine your search." : ""} \xB7 Click a cell to view and copy its full contents.</p>${matches.length ? `<div class="table-wrap inventory-results-wrap" id="inventory-results-scroll" data-preserve-scroll><table class="inventory-results" style="width:${width}px"><colgroup>${INVENTORY_COLUMNS.map((c) => `<col style="width:${c.width}px">`).join("")}<col style="width:140px"></colgroup><thead><tr>${INVENTORY_COLUMNS.map((c) => `<th class="${c.identifier ? "identifier-column" : ""}"><span class="two-line">${c.label}</span></th>`).join("")}<th>Action</th></tr></thead><tbody>${matches.slice(0, 30).map(
       (row) => `<tr>${INVENTORY_COLUMNS.map((c) => {
         const text = inventoryValue(row, inventory.mapping, c.key);
         return `<td class="${c.identifier ? "identifier-column" : ""}"><button class="cell-peek" data-action="inventory-cell" data-index="${inventory.rows.indexOf(row)}" data-key="${c.key}" data-header="${c.label}" title="${escape(text)}"><span class="two-line">${escape(text)}</span></button></td>`;
@@ -2764,7 +2817,7 @@ Only the selected observation basis is used; displayed values are rounded, recor
     return compact(quantity(`${p}.actualMass`, "Observed Mass", `${p}.massUnit`, ["mg", "g"]));
   }
   function componentTable(b, results2) {
-    if (!b.components.length) return '<div class="empty">No components yet. Search the built-in inventory and select Add Component.</div>';
+    if (!b.components.length) return '<div class="empty">No components yet. Search the current inventory and select Add Component.</div>';
     return `<section class="panel"><div class="panel-heading"><h2>Components</h2><span class="help">One component per row. Expand Details for stock preparation, snapshots, formulas and review.</span></div><div class="component-grid-scroll" id="component-table-scroll" data-preserve-scroll><table class="component-grid"><colgroup>${[225, 190, 95, 185, 120, 150, 215, 120, 175, 100].map((w) => `<col style="width:${w}px">`).join("")}</colgroup><thead><tr>${["Chemical Name", "Vendor", "MW (g/mol)", "Target Concentration", "Target Mass (mg)", "Target Liquid Volume (\xB5L)", "Observation", "Error (%)", "Preparation Method", "Review"].map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>${b.components.map((c, i) => {
       const r = results2.rows?.[i] || {}, p = `components.${i}`, method = r.method || c.method, expanded = expandedComponents.has(c.id), vendor = vendorDescription(c);
       const methods = c.form === "solution" ? [["existing", "Existing stock"]] : r.forcedStock ? [
@@ -2986,6 +3039,10 @@ Only the selected observation basis is used; displayed values are rounded, recor
       }
       if (action === "inventory-cell") {
         showDetail(b.dataset.header, inventoryValue(inventory.rows[Number(b.dataset.index)], inventory.mapping, b.dataset.key));
+        return;
+      }
+      if (action === "inventory-import-issues") {
+        showDetail("Local inventory import report", localInventoryReportText(inventory));
         return;
       }
       if (action === "inventory-header") {
