@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import ExcelJS from "exceljs";
 import { field } from "./fixture.mjs";
-test("public homepage uses automatically loaded Demo inventory without any inventory upload control", async ({ page }) => {
+test("public homepage labels the Demo source and offers browser-only local selection", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("./");
@@ -9,7 +9,9 @@ test("public homepage uses automatically loaded Demo inventory without any inven
   await page.getByRole("link", { name: "Buffer Making", exact: true }).click();
   await expect(page.getByText("Demo inventory", { exact: true })).toBeVisible();
   await expect(page.getByText(/Inventory Updated:/)).toBeVisible();
-  await expect(page.locator("#inventory-file,[data-map],#sheet-index,#header-row")).toHaveCount(0);
+  await expect(page.locator("#local-inventory-file")).toBeVisible();
+  await expect(page.locator("[data-map],#sheet-index,#header-row")).toHaveCount(0);
+  await expect(page.locator(".inventory-source-label")).toContainText("Published Demo inventory");
   await expect(page.getByRole("button", { name: /Load demo inventory/ })).toHaveCount(0);
   expect(errors).toEqual([]);
 });

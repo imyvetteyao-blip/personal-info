@@ -18,6 +18,7 @@ import { matchingRows } from "./inventory.mjs";
 import { isMeaningful } from "./inventory-config.mjs";
 import { INVENTORY_COLUMNS, inventoryValue, summaryEntries, vendorDescription } from "./inventory-view.mjs";
 import { loadBuiltinInventory } from "./builtin-inventory.mjs";
+import { readLocalInventory } from "./local-inventory.mjs";
 import { formatResult } from "./format.mjs";
 import { createPreparationWorkbook } from "./excel.mjs";
 
@@ -55,6 +56,7 @@ const units = {
 };
 let fieldScope = "";
 const expandedComponents = new Set();
+let inventoryRequest = 0;
 const editor = () => editors[route];
 function get(obj, path) {
   return path.split(".").reduce((o, k) => o?.[k], obj);
@@ -137,34 +139,63 @@ function header() {
     .join("")}</nav><span class="local"><span class="dot"></span>Browser local workspace</span></header>`;
 }
 function home() {
-  return `<div class="home-hero"><div class="eyebrow">YOUR LAB, ORGANIZED</div><h1>Prepare with confidence.<br>Keep every calculation clear.</h1><p>A practical workspace for buffer recipes, single standards, and S/IS cocktails. From your first input to a reviewed preparation record.</p></div><div class="module-grid"><a class="module" href="#buffer"><div class="module-icon">Bf</div><h2>Buffer Making</h2><p>Build a complete buffer recipe from the published built-in inventory. Calculate quantities and record actual preparation.</p><span class="module-link">Start a buffer preparation &nbsp; →</span></a><a class="module" href="#sis"><div class="module-icon">S/IS</div><h2>S/IS Making</h2><p>Prepare single standards, coordinate cocktail volumes, and review every stock transfer.</p><span class="module-link">Open the S/IS workbench &nbsp; →</span></a><div class="module"><div class="module-icon">···</div><h2>Other Preparation</h2><p>More preparation workflows will be available here.</p><span>${badge("Coming soon")}</span></div></div><div class="notice">Preparation records stay in this browser. The built-in inventory is maintained by the developer. No company system or backend is connected. Export preparation Excel files for documentation; browser data can be cleared.</div><div class="stats"><div><h3>01 &nbsp; Define your preparation</h3><p>Use explicit units, inventory snapshots, and stock details.</p></div><div><h3>02 &nbsp; Check the calculation</h3><p>Inspect formulas, volume plans, and validation before review.</p></div><div><h3>03 &nbsp; Keep a useful record</h3><p>Save locally, reopen, export a preparation Excel workbook.</p></div></div>`;
+  return `<div class="home-hero"><div class="eyebrow">YOUR LAB, ORGANIZED</div><h1>Prepare with confidence.<br>Keep every calculation clear.</h1><p>A practical workspace for buffer recipes, single standards, and S/IS cocktails. From your first input to a reviewed preparation record.</p></div><div class="module-grid"><a class="module" href="#buffer"><div class="module-icon">Bf</div><h2>Buffer Making</h2><p>Build a complete buffer recipe from your local inventory file or the published Demo inventory. Calculate quantities and record actual preparation.</p><span class="module-link">Start a buffer preparation &nbsp; →</span></a><a class="module" href="#sis"><div class="module-icon">S/IS</div><h2>S/IS Making</h2><p>Prepare single standards, coordinate cocktail volumes, and review every stock transfer.</p><span class="module-link">Open the S/IS workbench &nbsp; →</span></a><div class="module"><div class="module-icon">···</div><h2>Other Preparation</h2><p>More preparation workflows will be available here.</p><span>${badge("Coming soon")}</span></div></div><div class="notice">Preparation records stay in this browser. Local inventory files are processed in your browser. Published Demo data is maintained by the developer. No company system or backend is connected. Export preparation Excel files for documentation; browser data can be cleared.</div><div class="stats"><div><h3>01 &nbsp; Define your preparation</h3><p>Use explicit units, inventory snapshots, and stock details.</p></div><div><h3>02 &nbsp; Check the calculation</h3><p>Inspect formulas, volume plans, and validation before review.</p></div><div><h3>03 &nbsp; Keep a useful record</h3><p>Save locally, reopen, export a preparation Excel workbook.</p></div></div>`;
 }
 function title() {
   const e = editor();
   return `<div class="title-row"><div><div class="eyebrow">PREPARATION WORKSPACE</div><h1>${route === "buffer" ? "Buffer Making" : "S/IS Making"}</h1><p class="subtitle">${route === "buffer" ? "One recipe. One final volume. Every component accounted for." : "Single standards and coordinated cocktails, with a traceable calculation for every transfer."}</p></div><div class="actions">${badge(e.status, e.status === "Reviewed" ? "teal" : "amber")}${e.dirty ? badge("Unsaved changes") : ""}${button("new", "New preparation")}${button("save", "Save Preparation Record", "primary")}</div></div>${e.inputs.demo ? '<div class="notice warning"><strong>Demo data</strong> — Example values for testing only. This preparation remains marked as demo in saved records and Excel workbooks.</div>' : ""}${e.snapshot ? `<div class="notice saved-banner"><strong>Saved record reopened.</strong> Saved results and rule version ${escape(e.snapshot.ruleVersion)} are preserved. Editing an input recalculates results and requires a new review.${e.snapshot.imported ? " Imported records require local review." : ""}<details><summary>View saved snapshot</summary><pre>${escape(JSON.stringify(e.snapshot, null, 2))}</pre></details></div>` : ""}`;
 }
+function inventorySourceControls() {
+  return `<div class="inventory-source-controls"><label class="field">Choose Local Inventory (CSV / XLSX)<input class="file-input" id="local-inventory-file" type="file" accept=".csv,.tsv,.xlsx"></label>${inventory?.sourceType === "local" ? button("reload-inventory", "Use Published Demo Inventory") : ""}</div><p class="help">Local files are read only in this browser, not uploaded to a server or GitHub. The full inventory stays in memory; select it again after a refresh. Saved component snapshots remain in this browser.</p>`;
+}
 async function refreshBuiltinInventory() {
+  const request = ++inventoryRequest;
   inventoryLoading = true;
   inventoryError = "";
   inventory = null;
+  query = "";
   render();
   try {
-    inventory = await loadBuiltinInventory();
+    const data = await loadBuiltinInventory();
+    if (request === inventoryRequest) inventory = { ...data, sourceType: "published" };
   } catch (e) {
-    inventoryError = e.message;
+    if (request === inventoryRequest) inventoryError = `Unable to load built-in inventory. ${e.message}`;
   } finally {
-    inventoryLoading = false;
-    render();
+    if (request === inventoryRequest) {
+      inventoryLoading = false;
+      render();
+    }
+  }
+}
+async function chooseLocalInventory(file) {
+  const request = ++inventoryRequest;
+  inventoryLoading = true;
+  inventoryError = "";
+  render();
+  try {
+    const data = await readLocalInventory(file);
+    if (request === inventoryRequest) {
+      inventory = data;
+      query = "";
+    }
+  } catch (e) {
+    if (request === inventoryRequest)
+      inventoryError = `Local inventory could not be read: ${e.message}${inventory ? " The previous source remains selected." : ""}`;
+  } finally {
+    if (request === inventoryRequest) {
+      inventoryLoading = false;
+      render();
+    }
   }
 }
 function inventoryPanel() {
   if (inventoryLoading)
-    return '<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body" role="status">Loading built-in inventory…</div></section>';
-  if (inventoryError || !inventory)
-    return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${messages([`Unable to load built-in inventory. ${inventoryError}`])}${button("reload-inventory", "Retry loading")}</div></section>`;
+    return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${inventorySourceControls()}<p role="status">Loading inventory…</p></div></section>`;
+  if (!inventory)
+    return `<section class="panel"><div class="panel-heading"><h2>Chemical inventory</h2></div><div class="panel-body">${inventorySourceControls()}${messages([inventoryError || "Inventory is unavailable."])}${button("reload-inventory", "Retry loading")}</div></section>`;
   const matches = matchingRows(inventory.rows, inventory.mapping, query),
     width = INVENTORY_COLUMNS.reduce((n, c) => n + c.width, 0) + 140;
-  return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">Inventory Updated: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC · ${inventory.rows.length} entries</span></div><div class="panel-body">${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> — No confidential company inventory is published here.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory…" autocomplete="off"></label>${
+  return `<section class="panel"><div class="panel-heading"><h2><span class="number">01</span>Chemical inventory</h2><span class="help" title="Inventory version: ${inventory.version}">${inventory.sourceType === "local" ? "Loaded in Browser" : "Inventory Updated"}: ${escape(inventory.updatedAt.replace("T", " ").slice(0, 19))} UTC · ${inventory.rows.length} entries</span></div><div class="panel-body">${inventorySourceControls()}${inventoryError ? messages([inventoryError]) : ""}<p class="inventory-source-label"><strong>Current Search Source:</strong> ${inventory.sourceType === "local" ? `Local file — ${escape(inventory.source)} (browser only)` : `Published Demo inventory (${inventory.rows.length} demo entries; not your company inventory)`}</p>${inventory.demo ? '<p class="notice warning"><strong>Demo inventory</strong> — Real chemicals will not be found in these examples. Choose your local inventory file to search your own data.</p>' : ""}<label class="field">Find a chemical by name, ID, CAS, or barcode<input id="inventory-query" value="${escape(query)}" placeholder="Search inventory…" autocomplete="off"></label>${
     query
       ? `<p class="help">${matches.length} matching entries${matches.length > 30 ? " · Showing the first 30; refine your search." : ""} · Click a cell to view and copy its full contents.</p>${
           matches.length
@@ -497,7 +528,10 @@ app.addEventListener("input", (event) => {
 app.addEventListener("change", async (event) => {
   const t = event.target;
   try {
-    if (t.id === "record-file") {
+    if (t.id === "local-inventory-file") {
+      const file = t.files[0];
+      if (file) await chooseLocalInventory(file);
+    } else if (t.id === "record-file") {
       if (!t.files[0]) return;
       const r = decodeRecord(await t.files[0].text());
       r.id = uid();

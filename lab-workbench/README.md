@@ -21,7 +21,7 @@ Commit and push the validated `docs/` output to main. GitHub Pages uses main:/do
 
 ## Inventory updates and access
 
-See [the developer inventory guide](INVENTORY.md) for the exact source paths, CSV/XLSX conversion, validation, versioning, publication guard and refresh behavior. Ordinary users only search and select; no inventory upload or editing controls exist. The public site is **not access controlled**, and frontend inventory can be downloaded. Confidential company inventory is not included and must not be committed to this public repository or release.
+See [the developer inventory guide](INVENTORY.md) for the exact source paths, CSV/XLSX conversion, validation, versioning, publication guard and refresh behavior. Users can explicitly choose a local CSV/XLSX inventory file, which is parsed only in browser memory; no inventory file is sent to the server. The UI shows the active search source. Refreshing requires reselecting the local file, while saved component snapshots remain. No shared-inventory editing controls exist. The public site is **not access controlled**, and frontend inventory can be downloaded. Confidential company inventory is not included and must not be committed to this public repository or release.
 
 ## Compact component workflow
 

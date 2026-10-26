@@ -970,3 +970,23 @@ dialog textarea {
     left: auto;
   }
 }
+.inventory-source-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.inventory-source-controls .field {
+  flex: 1;
+  min-width: 220px;
+  max-width: 500px;
+}
+.inventory-source-label {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f4f9f9;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

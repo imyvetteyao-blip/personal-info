@@ -1,6 +1,10 @@
 # Developer-maintained inventory
 
-The public site currently uses **Demo inventory only**, as requested. There is no inventory upload, mapping, editing, replacement, or administrator interface for ordinary users.
+The public release contains **Demo inventory only**. To work with confidential inventory, users can choose a **local CSV/TSV/XLSX file**. It is parsed in browser memory without an upload request, server storage, or GitHub commit. Worksheet/header/column mapping remains automatic. There is no shared-inventory editing or administrator backend.
+
+The UI names the **Current Search Source**, file name and row count. An explicit local-file choice takes precedence over Demo data for that browser session. A late Demo response cannot replace it. Refreshing clears the full in-memory local inventory and returns to published Demo data; users reselect their file. Old `lab.inventory.v1` caches are never restored. Saved component snapshots and their local file fingerprint are retained in browser preparation records. **Use Published Demo Inventory** explicitly switches searches back to the public dataset.
+
+The local reader contains no network or persistence code. Browser tests verify that selecting and searching a local file emits no network requests, and that only selected component snapshots are saved by Save Preparation Record. This local workflow does not make the public site private or enable confidential server-side inventory hosting.
 
 ## Public Demo update: replace → validate/build → publish
 

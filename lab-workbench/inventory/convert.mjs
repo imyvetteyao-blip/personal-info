@@ -3,8 +3,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve, basename } from "node:path";
 import { createHash } from "node:crypto";
 import ExcelJS from "exceljs";
-import { importInventory } from "../src/inventory.mjs";
-import { INVENTORY_CONFIG, isMeaningful } from "../src/inventory-config.mjs";
+import { importInventory, validateInventoryTable } from "../src/inventory.mjs";
+import { INVENTORY_CONFIG } from "../src/inventory-config.mjs";
 export const INVENTORY_DIR = fileURLToPath(new URL("./", import.meta.url));
 export async function selectInventorySource({ demo = false, source, directory = process.env.LAB_INVENTORY_DIR || INVENTORY_DIR } = {}) {
   if (source) return { path: resolve(source), classification: "private" };
@@ -26,29 +26,7 @@ export async function convertInventory({ source, classification = "private", upd
     arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
   };
   const table = await importInventory(file, config, ExcelJS);
-  if (!table.rows.length) throw new Error("Inventory has no records. An empty inventory cannot be released.");
-  const seen = new Set();
-  table.rows.forEach((row, i) => {
-    const label = `Inventory row ${i + config.headerRow + 1}`;
-    if (typeof row[table.mapping.name] !== "string" || !row[table.mapping.name].trim())
-      throw new Error(`${label}: Chemical Name must be nonempty text.`);
-    for (const key of ["name", "barcode"])
-      if (!isMeaningful(row[table.mapping[key]])) throw new Error(`${label}: ${config.fields[key].label} must not be empty.`);
-    if (classification === "demo" && !String(row[table.mapping.barcode]).startsWith("DEMO-"))
-      throw new Error(`${label}: Demo releases require DEMO- barcodes; private/company inventory cannot be labeled Demo.`);
-    const barcode = String(row[table.mapping.barcode]);
-    if (seen.has(barcode)) throw new Error(`${label}: duplicate Barcode ${barcode}.`);
-    seen.add(barcode);
-    for (const key of ["mw", "density"]) {
-      const h = table.mapping[key],
-        v = row[h];
-      if (h && isMeaningful(v) && (!Number.isFinite(Number(v)) || Number(v) <= 0))
-        throw new Error(`${label}: ${config.fields[key].label} must be a positive number or blank.`);
-    }
-    for (const [key, v] of Object.entries(row))
-      if (v != null && (!["string", "number", "boolean"].includes(typeof v) || (typeof v === "number" && !Number.isFinite(v))))
-        throw new Error(`${label}: invalid value type in ${key}.`);
-  });
+  validateInventoryTable(table, config, classification);
   const version = createHash("sha256").update(JSON.stringify({ table, classification, updatedAt })).digest("hex").slice(0, 16);
   const payload = { schema: "lab-inventory", schemaVersion: 1, version, updatedAt, classification, demo: classification === "demo", ...table };
   payload.demo = classification === "demo";
